@@ -1,0 +1,23 @@
+{
+  "_comment": "Lean MCP set. Add via CodePilot's MCP page. Replace <...> placeholders. Never commit real tokens. Verify each command against the tool's current README.",
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "scrapling": {
+      "command": "scrapling",
+      "args": ["mcp"]
+    },
+    "searxng": {
+      "command": "npx",
+      "args": ["-y", "mcp-searxng"],
+      "env": { "SEARXNG_URL": "http://127.0.0.1:8080" }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "<your-fine-grained-token>" }
+    }
+  }
+}

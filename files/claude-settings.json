@@ -1,0 +1,15 @@
+{
+  "_comment": "Optional. Goes in <workspace>/.claude/settings.json IF your harness reads project .claude config (verify, CodePilot stores most config in its own DB, and skip-permissions overrides the permission half). Hooks run regardless of skip-permissions, so they are where real gating lives.",
+  "permissions": {
+    "allow": ["Read", "Edit", "Write", "Bash(git*)", "Bash(rg*)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "_comment": "Example gate: keep one guard on the most irreversible action even when permissions are skipped.",
+        "matcher": "Bash(git push*)",
+        "hooks": [{ "type": "command", "command": "echo 'push attempted, confirm manually' 1>&2; exit 2" }]
+      }
+    ]
+  }
+}
