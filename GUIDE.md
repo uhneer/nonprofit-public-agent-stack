@@ -102,10 +102,11 @@ The agent's human-looking page reader. Three tiers: fast HTTP impersonation, Chr
   ```
   pip install "scrapling[fetchers]"
   scrapling install
+  pip install scrapling[mcp]
   ```
-  (`scrapling install` pulls the browser binaries, a few hundred MB.)
+  (`scrapling install` pulls the browser binaries, a few hundred MB. The third line installs the `mcp` module that the MCP entry point imports, without it `scrapling mcp` crashes with `ModuleNotFoundError: No module named 'mcp'` even though `scrapling --version` works fine. Verified on v0.4.9.)
 - MCP command: `scrapling mcp`
-- **Verify:** `scrapling --version` prints, and `scrapling mcp` starts.
+- **Verify:** run `scrapling mcp` and confirm it starts an MCP server (waits on stdio). `scrapling --version` alone is not enough, it does not load the `mcp` dependency.
 
 ## Step 11 — SearXNG + mcp-searxng (private search)
 
@@ -123,13 +124,13 @@ The agent's own anonymous search, self-hosted, never routes through an AI vendor
        - html
        - json
    ```
-2. Run the container (needs Docker Desktop running):
+2. Run the container. **Pick a port that is not 8080.** 8080 is the default for Open WebUI, Jenkins, Tomcat, and a pile of other dev tools, and SearXNG silently returns HTML with no error when something else is on the port (the MCP then fails with `Invalid JSON format`). Use 8888 unless you know 8080 is free:
    ```
-   docker run -d --name searxng --restart unless-stopped -p 8080:8080 \
+   docker run -d --name searxng --restart unless-stopped -p 8888:8080 \
      -v "C:/path/to/config:/etc/searxng" docker.io/searxng/searxng:latest
    ```
-3. MCP command: `npx -y mcp-searxng`, env `SEARXNG_URL=http://127.0.0.1:8080`.
-- **Verify:** `curl "http://127.0.0.1:8080/search?q=test&format=json"` returns JSON.
+3. MCP command: `npx -y mcp-searxng`, env `SEARXNG_URL=http://127.0.0.1:8888` (or whatever host port you mapped in the previous step).
+- **Verify:** `curl "http://127.0.0.1:8888/search?q=test&format=json"` returns JSON, not HTML. If you get HTML, the port is occupied by something else and SearXNG never started, repeat step 2 on a different port.
 
 ## Step 12 — GitHub MCP (optional)
 
@@ -188,24 +189,41 @@ Low-latency, always-on, across-the-world access from your laptop or phone. No ac
 - **Verify:** with the host idle at the login screen, open Moonlight on your phone over cellular, get the full desktop, click around. If that works, the stack is correct end-to-end.
 - **Troubleshooting:** pairing `Error [-20]` or "Error 2" (certificate mismatch after a reinstall or hardware change), stop the Sunshine service, delete `cacert.pem` and `cakey.pem` in `%ProgramData%\Sunshine`, start the service, pair again. If Moonlight cannot see the host, ping the Tailscale IP first, Tailscale is the connectivity layer, Sunshine is the stream layer.
 
-## Step 18 — Optional hooks
+## Step 18 — Reboot persistence (zero-touch startup)
+
+Goal: reboot the machine, walk away, come back to a fully working agent stack with no windows opened and no prompts accepted. Set each layer once.
+
+1. **Docker Desktop engine autostart.** Open Docker Desktop, Settings, General, tick "Start Docker Desktop when you sign in to your computer" and "Use Docker Desktop in background by default." The SearXNG container from step 11 has `--restart unless-stopped`, so it comes back with the engine.
+2. **CodePilot autostart.** Add `CodePilot.exe` to the user Run key:
+   ```
+   reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v CodePilot /t REG_SZ /d "\"C:\path\to\CodePilot.exe\"" /f
+   ```
+   In CodePilot's own settings, toggle any "start minimized to tray" or "minimize on close" option so it does not pop a window at login. Closing the main window should send it to the tray, not exit the process. MCP servers spawn on-demand from CodePilot, so once CodePilot is up, the entire MCP layer is up.
+3. **Sunshine service.** Step 17 already set the Sunshine service to Automatic. Verify in `services.msc`, `SunshineService`, Startup type: Automatic.
+4. **Tailscale service.** The installer sets `Tailscale` to Automatic by default. Verify in `services.msc`.
+5. **Host power.** Step 17 set Sleep to Never. Also set "Turn off the display" to Never if you want Sunshine to stream the actual desktop rather than wake from sleep.
+6. **Hide tray icons (optional).** Windows, Settings, Personalization, Taskbar, "Other system tray icons," flip Docker / CodePilot / Tailscale / Sunshine to Off. They still run, they just stop cluttering the tray.
+- **Verify:** reboot, do not log in for a minute, log in from your phone via Moonlight over Tailscale (or just walk to the machine). The desktop should be up, CodePilot in the tray, Docker engine running, SearXNG responding on `127.0.0.1:8888`. No clicks given.
+
+## Step 19 — Optional hooks
 
 - Config: [files/claude-settings.json](files/claude-settings.json) at `E:\Logseq\.claude\settings.json`.
 - Hooks run regardless of skip-permissions, so a `PreToolUse` hook gating `git push` is your real guard. Verify CodePilot honors project `.claude` config before relying on it.
 
-## Step 19 — Final checklist
+## Step 20 — Final checklist
 
 - [ ] z.ai Coding Lite plan, API key in hand (0)
 - [ ] CodePilot installed (1), z.ai provider added with `API_TIMEOUT_MS`, model glm-5.2 (2)
 - [ ] Logseq graph, workspace path set (3)
 - [ ] `claude.md` (4), `user.md` filled (5), `soul.md` (6), `memory.md` + `memory/` (7)
 - [ ] ripgrep on PATH (8)
-- [ ] Context7 (9), Scrapling installed (10), SearXNG container up + JSON verified (11), GitHub MCP optional (12)
+- [ ] Context7 (9), Scrapling installed with `scrapling[mcp]` (10), SearXNG container up + JSON verified on a non-8080 port (11), GitHub MCP optional (12)
 - [ ] all MCP servers registered and green in CodePilot (13)
 - [ ] 1M context on, thinking MAX, base URL on `open.bigmodel.cn/api/anthropic` (14)
 - [ ] project formatter present (15)
 - [ ] Telegram bridge enabled and allowlisted (16)
 - [ ] Tailscale on host + clients, Sunshine service Automatic on host, Sleep Never, Moonlight paired over the Tailscale IP (17)
-- [ ] skip-permissions decision made with at least one gate kept (14, 16, 18)
+- [ ] reboot persistence configured: Docker autostart + tray, CodePilot autostart + tray, services Automatic, Sleep Never (18)
+- [ ] skip-permissions decision made with at least one gate kept (14, 16, 19)
 
 Done. A lean, autonomous, remotely-drivable agent for the price of a coding plan.
