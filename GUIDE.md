@@ -12,10 +12,10 @@ The cheap frontier model the whole stack rides on. Buy this first.
 1. Sign up at [z.ai](https://z.ai).
 2. Open the coding plans page, pick **Coding Lite** (the subsidized entry tier built for agent use).
 3. Dashboard, create an **API key**. Copy it, keep it private, never commit it.
-4. Note the endpoints:
-   - Anthropic-compatible (this stack): `https://api.z.ai/api/anthropic`
-   - OpenAI-compatible: `https://api.z.ai/api/paas/v4`
-   - Mainland fallback to test later: `https://open.bigmodel.cn`
+4. Note the endpoints (your Coding plan key works on both Anthropic-format endpoints, tested):
+   - **Primary (this stack):** `https://open.bigmodel.cn/api/anthropic` — streams the first byte in ~7s during long tool-call generation. Use this one.
+   - International mirror: `https://api.z.ai/api/anthropic` — same protocol, same key, but buffers the whole tool-call response server-side (first byte only after the model finishes generating, 190s+ on a big call). Slower perceived latency, no other difference.
+   - OpenAI-format (do not use with this stack): `https://api.z.ai/api/paas/v4` — Coding plan keys are scoped to the coding endpoints and rejected here.
 - **Verify:** you have an API key string and the base URL.
 
 ## Step 1 — Install CodePilot
@@ -31,7 +31,7 @@ The desktop agent app. Multi-model, Claude Agent SDK runtime, MCP support, remot
 
 - In CodePilot: Settings, Providers, Add provider.
   - Type: **Anthropic-compatible**
-  - Base URL: `https://api.z.ai/api/anthropic`
+  - Base URL: `https://open.bigmodel.cn/api/anthropic`
   - API key: your z.ai key (step 0)
   - Model name: `glm-5.2`
 - Advanced Options, Extra Environment Variables, paste:
@@ -149,8 +149,10 @@ Your repos: browse, issues, PRs.
 
 In CodePilot settings:
 - **1M context:** on.
-- **thinking mode:** the one to tune. Extended thinking is a long silent generation burst, the main thing that trips z.ai's idle reset (it drops after about 30s of silence). If you get "stream idle timeout" stalls, turn thinking down or off for long binges. Highest-probability fix.
-- **Endpoint fallback:** if stalls persist with thinking low, switch the base URL to `https://open.bigmodel.cn` and test.
+- **thinking mode:** MAX, no caveats. The "30s idle reset" is not real on the Anthropic-format endpoints (direct test, 2026-06-17: a 235s silent tool-call generation on `open.bigmodel.cn/api/anthropic` and a 190s one on `api.z.ai/api/anthropic` both completed without any reset). Extended thinking streams as `thinking` deltas immediately on bigmodel, so it never sits silent in the first place. Keep it on MAX.
+- **Base URL:** use `https://open.bigmodel.cn/api/anthropic` (step 2). It is not a "fallback," it is the better default. bigmodel streams the first byte in ~7s on a long tool call, api.z.ai buffers the whole call and only then sends anything.
+- **The actual timeout layer (if you ever see "stream idle timeout"):** it is client-side, in CodePilot or the SDK, not at z.ai's edge. Fix it there, raise the stream-idle limit. Do not touch thinking mode and do not add a proxy.
+- **Do not bother with `tool_stream=true` or a local proxy.** It is a paas/v4 (OpenAI-format) flag only. On `/api/anthropic` it is silently ignored, verified by direct test (233s silent generation with the flag set, no incremental streaming).
 - **dangerously skip permissions:** on for uninterrupted binges, off to gate each action. Security note below.
 
 Security note: skip-permissions removes the gate. Unattended, plus a remote bridge, plus stealth web, all at once, means anyone who reaches the bridge drives a fully ungated agent on your machine. Keep at least one gate (the bridge allowlist in step 16, or a hook in [files/claude-settings.json](files/claude-settings.json)).
@@ -168,12 +170,23 @@ Drive the agent and approve its actions from your phone, no physical clicking.
 3. **Allowlist your own chat id.** Mandatory if skip-permissions is on, it is the only thing stopping a stranger from driving your agent.
 - **Verify:** message the bot, it responds, and you can approve an action from the phone.
 
-## Step 17 — Full remote desktop
+## Step 17 — Full remote desktop (Sunshine + Moonlight + Tailscale)
 
-See the whole screen and click anything, including any prompt.
-- **RustDesk** (open-source, self-hostable, free, iOS and Android apps): [github.com/rustdesk/rustdesk](https://github.com/rustdesk/rustdesk) · [rustdesk.com](https://rustdesk.com). Recommended for privacy, run your own relay.
-- **AnyDesk** (commercial, simplest): [anydesk.com](https://anydesk.com).
-- Use the Telegram bridge for normal approve-from-phone, RustDesk/AnyDesk as the backup for full control.
+Low-latency, always-on, across-the-world access from your laptop or phone. No accept prompt, no third-party relay, no open inbound port. This replaces RustDesk/AnyDesk entirely.
+
+- Sunshine (host): [github.com/LizardByte/Sunshine](https://github.com/LizardByte/Sunshine) · [sunshine.com](https://sunshine.com)
+- Moonlight (client): [github.com/moonlight-stream/moonlight-qt](https://github.com/moonlight-stream/moonlight-qt) · [moonlight-stream.org](https://moonlight-stream.org) (iOS and Android apps in their respective stores)
+- Tailscale (mesh VPN): [github.com/tailscale/tailscale](https://github.com/tailscale/tailscale) · [tailscale.com](https://tailscale.com)
+1. **Install Tailscale on both the host and every client** (laptop, phone). Sign in on the same account, authorize each device in the admin console. Note the host's Tailscale IP, it is a stable `100.x.x.x` address.
+2. **Install Sunshine on the host.** Windows installer from the releases page. During install, set the Windows Firewall exception (the installer prompts). The Sunshine web UI lives at `https://localhost:47990`, set a username and password on first launch.
+3. **Set Sunshine service to Automatic.** `services.msc`, find `SunshineService`, Startup type: Automatic. This keeps the host reachable after reboot with no one logged in to click anything.
+4. **Set the host's Sleep to Never.** Control Panel, Power Options, "Change when the computer sleeps", Put the computer to sleep: Never. Sleep breaks the Tailscale connection and the stream.
+5. **Install Moonlight on the client.** Desktop (laptop) from the moonlight-stream repo releases, phone from the App Store / Play Store.
+6. **Pair.** In Moonlight, add a new host, use the host's **Tailscale IP** (`100.x.x.x`), not its LAN IP. Moonlight shows a 4-digit PIN. Open `https://<tailscale-ip>:47990` on the client (or the host's `https://localhost:47990`), Sunshine Web UI, PIN page, paste the PIN. Authorize once, Moonlight remembers it.
+7. **Connect.** Tap the host in Moonlight, you are on the desktop. Use the Telegram bridge (step 16) for quick approve-from-phone without opening the stream, Sunshine + Moonlight for full visual control.
+- **Stream shortcuts (Moonlight):** `Ctrl+Alt+Shift+X` toggle fullscreen · `Ctrl+Alt+Shift+Z` toggle mouse capture · `Ctrl+Alt+Shift+Q` disconnect.
+- **Verify:** with the host idle at the login screen, open Moonlight on your phone over cellular, get the full desktop, click around. If that works, the stack is correct end-to-end.
+- **Troubleshooting:** pairing `Error [-20]` or "Error 2" (certificate mismatch after a reinstall or hardware change), stop the Sunshine service, delete `cacert.pem` and `cakey.pem` in `%ProgramData%\Sunshine`, start the service, pair again. If Moonlight cannot see the host, ping the Tailscale IP first, Tailscale is the connectivity layer, Sunshine is the stream layer.
 
 ## Step 18 — Optional hooks
 
@@ -189,10 +202,10 @@ See the whole screen and click anything, including any prompt.
 - [ ] ripgrep on PATH (8)
 - [ ] Context7 (9), Scrapling installed (10), SearXNG container up + JSON verified (11), GitHub MCP optional (12)
 - [ ] all MCP servers registered and green in CodePilot (13)
-- [ ] 1M context on, thinking tuned, endpoint fallback noted (14)
+- [ ] 1M context on, thinking MAX, base URL on `open.bigmodel.cn/api/anthropic` (14)
 - [ ] project formatter present (15)
 - [ ] Telegram bridge enabled and allowlisted (16)
-- [ ] RustDesk or AnyDesk installed (17)
+- [ ] Tailscale on host + clients, Sunshine service Automatic on host, Sleep Never, Moonlight paired over the Tailscale IP (17)
 - [ ] skip-permissions decision made with at least one gate kept (14, 16, 18)
 
 Done. A lean, autonomous, remotely-drivable agent for the price of a coding plan.
