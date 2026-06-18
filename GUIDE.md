@@ -225,5 +225,6 @@ Goal: reboot the machine, walk away, come back to a fully working agent stack wi
 - [ ] Tailscale on host + clients, Sunshine service Automatic on host, Sleep Never, Moonlight paired over the Tailscale IP (17)
 - [ ] reboot persistence configured: Docker autostart + tray, CodePilot autostart + tray, services Automatic, Sleep Never (18)
 - [ ] skip-permissions decision made with at least one gate kept (14, 16, 19)
+- [ ] **run [healthtest.md](healthtest.md) in a fresh CodePilot session, every AI-run test passes, then do the user-only reboot test (U01)**
 
 Done. A lean, autonomous, remotely-drivable agent for the price of a coding plan.

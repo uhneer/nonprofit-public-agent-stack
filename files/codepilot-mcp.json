@@ -1,5 +1,5 @@
 {
-  "_comment": "Lean MCP set. Add via CodePilot's MCP page. Replace <...> placeholders. Never commit real tokens. Verify each command against the tool's current README.",
+  "_comment": "Lean MCP set. Add via CodePilot's MCP page. Replace <...> placeholders. Never commit real tokens. Port 8888 for SearXNG is deliberate: 8080 is Open WebUI / Jenkins / Tomcat default and SearXNG silently returns HTML (not JSON) when it cannot bind, which breaks mcp-searxng with a misleading 'Invalid JSON format' error. Use 8888 unless you know 8080 is free. See GUIDE.md step 11 and healthtest.md T08/T21/T22.",
   "mcpServers": {
     "context7": {
       "command": "npx",
@@ -12,7 +12,7 @@
     "searxng": {
       "command": "npx",
       "args": ["-y", "mcp-searxng"],
-      "env": { "SEARXNG_URL": "http://127.0.0.1:8080" }
+      "env": { "SEARXNG_URL": "http://127.0.0.1:8888" }
     },
     "github": {
       "command": "npx",

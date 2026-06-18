@@ -9,17 +9,17 @@ Two documents:
 ---
 
 ## 1. Foundation (the spine)
-- **Model:** GLM 5.2, the z.ai **Coding Lite** plan (subsidized, far cheaper than tokens). Endpoint `https://api.z.ai/api/anthropic` (Anthropic-compatible). Fallback to test if idle resets persist: `https://open.bigmodel.cn`.
+- **Model:** GLM 5.2, the z.ai **Coding Lite** plan (subsidized, far cheaper than tokens). Primary endpoint `https://open.bigmodel.cn/api/anthropic` (Anthropic-compatible, streams the first byte in ~7s on long tool calls). The z.ai mirror at `https://api.z.ai/api/anthropic` is the same protocol and key but buffers the whole tool-call response, so it is the slower perceived-latency fallback, not the default.
 - **Harness:** [CodePilot](https://github.com/op7418/CodePilot) (Electron desktop), runtime `claude-code-sdk` (the Claude Agent SDK under the hood).
 - **Workspace:** a [Logseq](https://logseq.com) graph at `E:\Logseq`. The agent's work dir, notes, and memory home in one place.
-- **Remote:** Telegram bridge for clawbot-style remote control and approve-from-phone, plus RustDesk or AnyDesk for full remote desktop.
+- **Remote:** Telegram bridge for clawbot-style remote control and approve-from-phone, plus Sunshine + Moonlight + Tailscale for full low-latency remote desktop. Replaces RustDesk/AnyDesk entirely, no third-party relay, no inbound port, no accept prompt.
 
 ## 2. Provider and runtime config (CodePilot Settings, stored in `codepilot.db`)
 - `extra_env`: `API_TIMEOUT_MS=3000000`. Role models map `sonnet -> GLM-5-Turbo`, `opus -> GLM-5.1`, `haiku -> GLM-4.5-Air`. Note: fan-out subagents run on GLM-5-Turbo, not 5.2.
 - `context_1m`: on.
-- `thinking_mode`: on. It is the main source of the >30s silent generation that trips z.ai's idle reset, so turn it down or off for long binges if you hit stalls. Highest-probability timeout fix.
+- `thinking_mode`: MAX. The "z.ai 30s idle reset" is a myth, disproved by direct test on 2026-06-17 (235s silent generation on bigmodel, 190s on the z.ai mirror, both completed without reset). Keep it on MAX. If you ever see a real "stream idle timeout" error, it is client-side in CodePilot or the SDK, not at z.ai's edge, fix it there.
 - `dangerously_skip_permissions`: on enables uninterrupted binges. Security caveat in step 14.
-- Timeout switches, in order: thinking down, then the bigmodel endpoint. `API_TIMEOUT_MS` is already maxed and governs total time, not idle gaps.
+- `API_TIMEOUT_MS` governs total call time, not idle gaps. The bigmodel endpoint is the default, not a fallback switch.
 
 ## 3. Instruction documents (custom, in `E:\Logseq`, loaded by the SDK)
 - `claude.md` = the [nonprofit ruleset](https://github.com/uhneer/nonprofit-agent-rules): firm GLM imperatives, compressed, with examples and tool-call hygiene. The brain.
@@ -53,12 +53,13 @@ Full config block: [files/codepilot-mcp.json](files/codepilot-mcp.json).
 
 ## 8. Stock vs custom (so you know what is yours)
 - **Stock:** the CodePilot app and runtime, the soul/user/memory/HEARTBEAT/README/PATH templates, the z.ai provider entry.
-- **Custom (you added):** the `claude.md` ruleset, the MCP set, the cave-speak memory convention, the config tweaks (1M context, role models, timeout, skip-permissions), and the Telegram bridge.
+- **Custom (you added):** the `claude.md` ruleset, the MCP set, the cave-speak memory convention, the config tweaks (1M context, role models, timeout, skip-permissions), the Telegram bridge, and the Sunshine + Moonlight + Tailscale remote layer.
 
 ---
 
 ## Files
 - [GUIDE.md](GUIDE.md) — the granular, step-per-component build.
+- [healthtest.md](healthtest.md) — end-to-end health check, run it after the build is done.
 - [files/nonprofitclaude.md](files/nonprofitclaude.md) — the ruleset (rename to `claude.md`).
 - [files/nonprofitmemory.md](files/nonprofitmemory.md) — memory template and cave-speak rule.
 - [files/user.md](files/user.md), [files/soul.md](files/soul.md) — identity templates.
