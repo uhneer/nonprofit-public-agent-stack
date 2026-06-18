@@ -90,10 +90,14 @@ Plus three user-only tests (U01 to U03) the AI cannot run.
 **Fail hint:** "no tool named resolve-library-id" means Context7 is not registered in CodePilot MCP page (GUIDE.md step 9, step 13).
 
 ### T07 — Scrapling fetch (the AP test) `[AI]`
-**Proves:** Scrapling is installed with the `[mcp]` dep, can fetch real-world pages, returns content not errors.
-**Prompt:** `Fetch https://apnews.com/ using Scrapling. Pick any front-page article, follow the link, fetch the article, and quote the first 3 sentences of the body verbatim. Give me the article URL so I can open it in a browser and verify your quote matches character-for-character.`
+**Proves:** Scrapling is installed with all five install lines done (`[fetchers]`, `scrapling install`, `[mcp]`, `markdownify`, Chromium browser), can fetch real-world pages via the default `get` tool, returns content not errors.
+**Prompt:** `Fetch https://apnews.com/ using Scrapling's get tool. Pick any front-page article, follow the link, fetch the article with the get tool, and quote the first 3 sentences of the body verbatim. Give me the article URL so I can open it in a browser and verify your quote matches character-for-character. Do not use bulk_get as a workaround, the default get tool must work.`
 **Pass:** a specific article URL, three sentences quoted exactly, the quote actually matches when you open the URL.
-**Fail hint:** `ModuleNotFoundError: No module named 'mcp'` means `pip install scrapling[mcp]` was skipped (GUIDE.md step 10, the third install line).
+**Fail hints:**
+- `ModuleNotFoundError: No module named 'mcp'`: run `pip install scrapling[mcp]`.
+- `No module named 'markdownify'`: run `pip install markdownify`. The `bulk_get` tool works without it, which masks this bug, so the test explicitly forbids `bulk_get` as a workaround.
+- `BrowserType.launch_persistent_context: Executable doesn't exist at ...ms-playwright/chromium-...`: run `playwright install chromium`. This is separate from `scrapling install` (which pulls Camoufox only, not Chromium).
+- All three failure modes are covered in GUIDE.md step 10 (verified in the 2026-06-18 health test).
 
 ### T08 — SearXNG search `[AI]`
 **Proves:** SearXNG is running, mcp-searxng is registered, the URL is the right port.
@@ -111,7 +115,9 @@ Plus three user-only tests (U01 to U03) the AI cannot run.
 **Proves:** the URL reader works even if search does not. It bypasses SearXNG, directly fetches.
 **Prompt:** `Use web_url_read to fetch the full text of https://en.wikipedia.org/wiki/GLM_(language_model) and return the headings only.`
 **Pass:** a list of section headings.
-**Fail hint:** if this works but T08 fails, SearXNG itself is down (check `docker ps`), only the MCP's URL reader works.
+**Fail hints:**
+- If this works but T08 fails, SearXNG itself is down (check `docker ps`), only the MCP's URL reader works.
+- `MCP error -32603: Website Error (429): Rate limit exceeded` is transient, not a stack bug. Wikipedia and other big sources throttle aggressive fetchers. Retry with a less-busy URL (for example a MDN or IBM developer page), or wait a minute and try again. Do not "fix" this by changing SearXNG config.
 
 ### T11 — GitHub MCP (optional) `[AI]`
 **Proves:** GitHub MCP is registered and the token works.
@@ -143,11 +149,17 @@ For all tests in this layer, the AI should use the Read tool to open the file an
 **Pass:** exists. Content is one short paragraph or one line, not duplicating claude.md.
 **Fail hint:** if it has a long persona block duplicating claude.md, it was not pruned in the 2026-06-18 rewrite.
 
-### T15 — memory.md and memory/ folder `[LOCATE]`
-**Proves:** the memory system is set up.
-**Prompt:** `Check E:/Logseq/memory.md exists and E:/Logseq/memory/ directory exists. Show me the first 10 lines of memory.md and list files in memory/.`
-**Pass:** both exist. memory.md has the index format. memory/ has at least one topic file (or is empty if you just set up).
-**Fail hint:** if memory/ folder is missing, GUIDE.md step 7 was skipped.
+### T15 — memory system (both of them) `[LOCATE]`
+**Proves:** both memory systems are set up. This stack has two, they serve different purposes:
+- **Manual Logseq memory** at `E:/Logseq/memory.md` + `E:/Logseq/memory/`: the cave-speak convention from `claude.md` section 11, you write it manually as a durable rule.
+- **Harness auto-memory** at `C:/Users/<you>/.claude/projects/<workspace-slug>/memory/MEMORY.md` + `.../memory/`: the harness's own memory system, the AI writes via tools, the index is loaded into every session's context.
+
+**Prompt:** `Check both memory systems. First: does E:/Logseq/memory.md exist and does E:/Logseq/memory/ have any files in it? Show the first 10 lines of memory.md. Second: does the harness auto-memory directory at C:/Users/Anira/.claude/projects/E--Logseq/memory/ exist? List its files and show the first 10 lines of MEMORY.md if present.`
+**Pass:** both directories exist. At least one has actual entries (not just the template header).
+**Fail hints:**
+- Logseq `memory.md` is just the template header: GUIDE.md step 7 was set up but you have not written any entries yet. Not broken, just empty.
+- Harness auto-memory directory missing: the harness has not been initialized on this workspace yet. Run the AI once and have it save a memory entry to create the directory.
+- If the AI's T31 write test lands in the harness auto-memory path, that is correct, not a bug. The Logseq manual memory is for you, the harness auto-memory is for the AI.
 
 ### T16 — .mcp.json at workspace root `[LOCATE]`
 **Proves:** the project-level MCP config is in place (best-effort fallback, GUIDE.md step 13).
@@ -219,9 +231,9 @@ For all tests in this layer, the AI should use the Read tool to open the file an
 
 ### T26 — Sunshine config dir `[LOCATE]`
 **Proves:** Sunshine has been initialized (creates the config dir on first run).
-**Prompt:** `Run \`ls "C:/ProgramData/Sunshine" 2>&1 | head -10\` and report.`
-**Pass:** a list including `sunshine.conf`, `apps`, and either `cacert.pem` + `cakey.pem` or none (re-generated after the cert-reset troubleshooting step).
-**Fail hint:** if the path does not exist, Sunshine was never launched to setup (GUIDE.md step 17).
+**Prompt:** `Sunshine's config dir is install-location-dependent, not always C:/ProgramData/Sunshine. First find the service binary path with \`sc qc SunshineService 2>&1 | grep -i binary_path_name\`, then check the sibling config dir (typically <install-dir>/config/). Also check the default C:/ProgramData/Sunshine/ in case the installer used it. Report which path actually has the config and what files are in it.`
+**Pass:** one of the candidate paths has `sunshine.conf`, `apps.json` (or an `apps/` folder), and a `credentials/` subfolder with `cacert.pem` + `cakey.pem`.
+**Fail hint:** if neither candidate path has those files, Sunshine was installed but never launched to setup. Run the Sunshine UI once to trigger initial config generation, or check `sunshine.log` in the install dir for startup errors (GUIDE.md step 17).
 
 ### T27 — Tailscale IP known and stable `[AI]`
 **Proves:** you have the IP to give Moonlight.
@@ -247,9 +259,9 @@ For all tests in this layer, the AI should use the Read tool to open the file an
 
 ### T30 — CodePilot autostart `[AI]`
 **Proves:** CodePilot is in the user Run key so it launches at login.
-**Prompt:** `Run \`reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v CodePilot 2>&1\` and report.`
-**Pass:** a `REG_SZ` value pointing at `CodePilot.exe`.
-**Fail hint:** GUIDE.md step 18 reg-add command was not run.
+**Prompt:** `Run this literal command and report its output: \`reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v CodePilot\`. Do NOT substitute PowerShell cmdlets like \`Get-ItemProperty\` or \`Get-Item\`, they return empty in some agent shell contexts and produce false negatives even when the registry entry exists. Use the cmd \`reg query\` form.`
+**Pass:** output shows `<key path>` then a line with `CodePilot REG_SZ "C:\path\to\CodePilot.exe"`.
+**Fail hint:** if `reg query` (the cmd form, not PowerShell) returns "not found", run the GUIDE.md step 18 `reg add` command.
 
 ---
 

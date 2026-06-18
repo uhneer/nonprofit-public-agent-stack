@@ -103,10 +103,17 @@ The agent's human-looking page reader. Three tiers: fast HTTP impersonation, Chr
   pip install "scrapling[fetchers]"
   scrapling install
   pip install scrapling[mcp]
+  pip install markdownify
+  playwright install chromium
   ```
-  (`scrapling install` pulls the browser binaries, a few hundred MB. The third line installs the `mcp` module that the MCP entry point imports, without it `scrapling mcp` crashes with `ModuleNotFoundError: No module named 'mcp'` even though `scrapling --version` works fine. Verified on v0.4.9.)
+  Five lines, each plugs a specific failure mode (all verified on v0.4.9, 2026-06-18 health test):
+  - `scrapling[fetchers]` is the main package with HTTP impersonation.
+  - `scrapling install` pulls Camoufox browser binaries (a few hundred MB). It does **not** install Chromium for the Playwright fetcher path.
+  - `scrapling[mcp]` installs the `mcp` module the MCP entry point imports. Without it `scrapling mcp` crashes with `ModuleNotFoundError: No module named 'mcp'` even though `scrapling --version` works fine.
+  - `markdownify` is what the `get` tool's HTML-to-Markdown converter imports. Without it, `mcp__scrapling__get` raises `No module named 'markdownify'` on every call (the `bulk_get` path works without it, which masks the bug).
+  - `playwright install chromium` installs the Chromium binary the `fetch` tool launches. Without it, `mcp__scrapling__fetch` raises `BrowserType.launch_persistent_context: Executable doesn't exist at ...ms-playwright/chromium-.../chrome.exe`. `scrapling install` does not pull this, it pulls Camoufox only.
 - MCP command: `scrapling mcp`
-- **Verify:** run `scrapling mcp` and confirm it starts an MCP server (waits on stdio). `scrapling --version` alone is not enough, it does not load the `mcp` dependency.
+- **Verify:** run `scrapling mcp` and confirm it starts an MCP server (waits on stdio). Then run a real `mcp__scrapling__get` call against any page and confirm it returns markdown, not a `markdownify` import error. `scrapling --version` alone is not enough, it does not load any of the `mcp`, `markdownify`, or Chromium dependencies.
 
 ## Step 11 — SearXNG + mcp-searxng (private search)
 
