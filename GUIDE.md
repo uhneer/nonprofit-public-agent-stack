@@ -77,6 +77,14 @@ The brain: priorities, voice, long-run behavior, web-verify discipline, tool-cal
 2. Write memory in compressed Chinese plus English technical terms, append-only, no secrets. See the file for the rule.
 - **Verify:** `memory.md` exists and the `memory/` folder is present.
 
+> **Turning memory off for a specific conversation**
+> CodePilot has no native per-conversation memory toggle (verified in `codepilot.db` settings, 2026-06-18). Three workarounds, in order of cleanliness:
+> 1. **Use a different working directory for that session.** Auto-memory is keyed by workspace path. The harness stores it at `C:\Users\<you>\.claude\projects\<workspace-slug>\memory\`. A session pointed at `E:\Scratch` instead of `E:\Logseq` has no memory and writes none. This is the clean option. The `chat_sessions` table has per-row `working_directory` so each session is independent.
+> 2. **Rename the memory folder.** Move `C:\Users\<you>\.claude\projects\<workspace-slug>\memory\` to `memory.disabled\` for the duration. Move it back to re-enable. Crude but reversible.
+> 3. **Strip the memory block from a session's system prompt.** Each `chat_sessions` row has its own `system_prompt` field. Remove the `<assistant-memory-guidance>` block and that session will not read or write memory. Requires direct DB editing.
+>
+> The Logseq manual memory (`E:\Logseq\memory.md`) is a separate convention governed by `claude.md` section 11. It is only touched when you (or the agent following the rule) explicitly write to it, so it is already opt-in per write.
+
 ## Step 8 — ripgrep
 
 Fast code search the SDK prefers over shell grep.
