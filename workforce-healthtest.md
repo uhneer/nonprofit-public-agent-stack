@@ -23,6 +23,25 @@ If any preflight fails, fix that first. The audit below will not pass meaningful
 
 ---
 
+## Audit output location & naming convention (mandatory)
+
+All workforce audit artifacts go to **`E:/Logseq/audits/`** (create the dir if missing). Two artifact types:
+
+1. **Workforce-produced audit doc** (the W2 deliverable): `E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/audit-report.md`. Same dir also gets `audit-report.json` (machine-readable Verifier table).
+2. **Audit run record** (the human/agent's summary of running the audit, written separately from the workforce output): `E:/Logseq/audits/audit-YYYY-MM-DD-NN.md`.
+
+Naming rules:
+- `YYYY-MM-DD` is today's date.
+- `NN` is a zero-padded sequence number starting at `01`. Bump NN for every new run on the same day, regardless of which artifact type.
+- Before creating, `ls E:/Logseq/audits/` to find the highest existing NN for today, then use NN+1.
+- Example: first run on 2026-06-19 → workforce writes `wf-audit-2026-06-19-01/audit-report.md`, run record is `audit-2026-06-19-01.md`. Second run same day → `02` for both.
+
+**Agents running audits MUST be told this in the prompt.** The W1 and W2 prompts below already include the `E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/` path. If you write a new audit prompt, hard-code the same path scheme.
+
+**Front-facing chat output is mandatory.** After every workforce audit, the dispatching agent (or the human running it) MUST report a PASS/FAIL verdict in the chat, not just "the doc is at X". Users don't open .md files. The doc is for the AI to fix issues; the chat is for the human to see status. See W1 and W2 output-format sections below.
+
+---
+
 ## W1 — Workforce smoke test `[AI]`
 
 **Proves:** Eigent's custom 5-agent workforce can be triggered at all and at least one specialized worker produces output.
@@ -33,6 +52,24 @@ Trigger a multi-agent dispatch with a small task: ask the Researcher to fetch ex
 ```
 
 **Pass:**
+- The Researcher (or whichever worker Coordinator routes to) returns the real page title (likely "Example Domain").
+- Bonus: the Coordinator's dispatch log shows it picked the Researcher based on the worker description rewrite in PATCHES.md.
+
+**Required chat output (after dispatch completes):**
+```
+W1 SMOKE TEST
+Verdict: PASS | FAIL
+Worker fired: <name>
+Page title returned: <text>
+Dispatch log excerpt: <1-2 lines>
+One-sentence evidence: <why this passes or fails>
+```
+
+**Fail hint:** if dispatch fails or only the Single Agent responds, multi-agent routing isn't configured. Check Settings → Agents to verify all 5 roles are enabled, and re-verify `healthtest.md` T13b (chat_service.py patches).
+
+**Note on UI count:** Eigent UI shows "4 agents running" during workforce dispatch. This is correct, not a bug. It counts dispatched workers (`workforce._children`). Coordinator is the orchestrator, passed separately to the `Workforce(...)` constructor, and is not counted as a child. 4 workers + 1 Coordinator = 5 total.
+
+---
 - The Researcher (or whichever worker Coordinator routes to) returns the real page title (likely "Example Domain").
 - Bonus: the Coordinator's dispatch log shows it picked the Researcher based on the worker description rewrite in PATCHES.md.
 
@@ -55,22 +92,59 @@ Trigger a multi-agent dispatch with a small task: ask the Researcher to fetch ex
 - Every claim in the final doc traces to a tool call or verifiable artifact (anti-fabrication).
 
 **Naming scheme for audit artifacts (mandatory):**
-- Workspace dir: `E:/tmp/wf-audit-YYYY-MM-DD-NN/` where `YYYY-MM-DD` is today's date and `NN` is a zero-padded sequence number starting at `01`. Bump NN if you re-run on the same day.
+- Workspace dir: `E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/` where `YYYY-MM-DD` is today's date and `NN` is a zero-padded sequence number starting at `01`. Bump NN if you re-run on the same day.
 - Final report: `audit-report.md` inside that dir.
 - Verifier table also exported as `audit-report.json` for machine parsing.
-- Example: first run on 2026-06-19 → `E:/tmp/wf-audit-2026-06-19-01/audit-report.md`. Second run same day → `wf-audit-2026-06-19-02/`.
+- Example: first run on 2026-06-19 → `E:/Logseq/audits/wf-audit-2026-06-19-01/audit-report.md`. Second run same day → `wf-audit-2026-06-19-02/`.
+- Run record (separate from the workforce output, written by whoever ran the audit): `E:/Logseq/audits/audit-YYYY-MM-DD-NN.md`.
 
 **Preflight (must pass before dispatch):**
 - Eigent backend alive on port **5001** (NOT 8000). Quick check: `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5001/health` should return `200` within 2s. If it returns `000` (timeout), the backend event loop is hung — see "Backend hang recovery" below.
 - `.mcp.json` at workspace root (`E:/Logseq/.mcp.json`), not at `E:/Eigent/`. T17 in `healthtest.md` covers this.
-- `E:/tmp/` writable.
+- `E:/Logseq/audits/` writable (create if missing).
 
-**Backend hang recovery:** if the preflight curl returns `000` repeatedly, the asyncio event loop is blocked (likely a stuck prior chat dispatch). Close and restart Eigent.exe, OR `taskkill /PID <pid> /F` the uvicorn process holding port 5001, then relaunch Eigent. Restart loses in-UI session state. This is the only known recovery.
+**Backend hang recovery:** if the preflight curl returns `000` repeatedly, the asyncio event loop is blocked (likely a stuck prior chat dispatch). Close and restart Eigent.exe, OR `taskkill /PID <pid> /F` the uvicorn process holding port 5001, then relaunch Eigent. Restart loses in-UI session state. This is the only known recovery. See PATCHES.md P12 for diagnosis status.
 
-**Prompt (paste into Eigent multi-agent dispatch — replace `YYYY-MM-DD` with today's date and `NN` with the next sequence number):**
+**Prompt (paste into Eigent multi-agent dispatch — replace `YYYY-MM-DD` with today's date and `NN` with the next sequence number from `ls E:/Logseq/audits/`):**
 
 ```
-You are running a Workforce Architecture Audit. Final deliverable: a structured results sheet at E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md written by the Implementer, verified by the Verifier, with parallel contributions from the Researcher and Subject Analyst. The doc's primary purpose is to PROVE the 5-agent architecture is firing. Every claim must trace back to a tool call or a verifiable artifact on disk.
+You are running a Workforce Architecture Audit. Final deliverable: a structured results sheet at E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/audit-report.md written by the Implementer, verified by the Verifier, with parallel contributions from the Researcher and Subject Analyst. The doc's primary purpose is to PROVE the 5-agent architecture is firing. Every claim must trace back to a tool call or a verifiable artifact on disk.
+
+# MANDATORY front-facing chat output
+
+After the workforce finishes and the Verifier signs off, the Coordinator MUST emit a single chat message to the user with this exact shape (in addition to the doc on disk). Users do not open .md files. The chat IS the deliverable for them; the doc is for follow-up AI work.
+
+```
+W2 WORKFORCE AUDIT — YYYY-MM-DD-NN
+Verdict: PASS | FAIL
+Criteria (10):
+  1. File exists, 3-30KB                 PASS | FAIL | NA
+  2. All 5 roles named                   PASS | FAIL | NA
+  3. 5+ file:line citations              PASS | FAIL | NA
+  4. P1 Researcher verbatim tool output  PASS | FAIL | NA
+  5. P2 Subject Analyst 3+ files         PASS | FAIL | NA
+  6. P2 parallel-dispatch marker         PASS | FAIL | NA
+  7. P3 Implementer dep task IDs match   PASS | FAIL | NA
+  8. P4 Verifier redirect rule honored   PASS | FAIL | NA
+  9. P5 Coordinator 0 tool calls         PASS | FAIL | NA
+  10. Final verdict matches reality      PASS | FAIL | NA
+Doc: E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/audit-report.md
+JSON: E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/audit-report.json
+One-sentence summary: <what happened>
+Top failure (if any): <criterion N — one-sentence root cause>
+```
+
+If the workforce cannot produce the doc (e.g., backend hung, dispatch failed), the Coordinator still emits the chat block with all criteria marked FAIL or NA and a one-sentence reason. Silence is not acceptable.
+
+# Subject of the doc
+
+Build a 600-900 word technical doc titled "How Eigent's 5-Agent Workforce Routes a Task: From Coordinator Dispatch to Verifier Sign-Off" that cites real files from E:/Eigent/resources/backend/app/. The doc must include five sections:
+
+1. Architecture overview — name all 5 roles (Coordinator, Implementer, Researcher, Subject Analyst, Verifier) and cite the file:line where each is constructed.
+2. Pipeline stages — explain how Coordinator declares dependencies between stages, quote the pipeline_order or dispatch_contract from COORDINATOR_SYS_PROMPT.
+3. Tool surfaces — list the MCP tools each worker has access to (context7, scrapling, searxng, github, supabase, plus file tools).
+4. Anti-fabrication rules — cite the rule text from SINGLE_AGENT_SYS_PROMPT or the depth-limited toolkit that prevents fabricated tool output.
+5. Real example trace — walk through probes P1-P5 below, showing which agent did what.
 
 # Subject of the doc
 
@@ -102,13 +176,13 @@ Without reading any external URL, decompose this question: "What are the 3 most 
     (If you genuinely don't know which, write SEQUENTIAL_DISPATCH_LEAKED — Coordinator should have given you the dependency or not, and you can tell by checking your input.)
 
 ## P3 — Implementer probe (depends on P1 + P2)
-Write the final doc to E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md.
+Write the final doc to E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/audit-report.md.
   - Cite the dependency task IDs from P1 and P2 (Coordinator provides these in the dispatch payload).
   - Use the Write tool to create the file.
   - After writing, run a Read on the file to confirm it exists and report its size in bytes.
 
 ## P4 — Verifier probe (depends on P3, runs LAST)
-Open E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md and verify:
+Open E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/audit-report.md and verify:
   - File exists and word count is between 600 and 900.
   - All file:line citations in section 1 actually point to real lines. For each citation, Read the cited file:line and confirm the line content matches the claim.
   - All URLs in the doc are reachable. URL rule (READ CAREFULLY):
@@ -128,7 +202,7 @@ The Coordinator's wrap-up must include:
   - The list of task IDs created and which worker each went to.
   - One sentence: "Audit verdict: PASS" or "Audit verdict: FAIL (reason)".
 
-# Output structure of E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md
+# Output structure of E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/audit-report.md
 
 # How Eigent's 5-Agent Workforce Routes a Task
 
@@ -161,7 +235,7 @@ The Coordinator's wrap-up must include:
 
 ### P3 Implementer probe
 - Dependency task IDs: <list from Coordinator>
-- File written: E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md
+- File written: E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/audit-report.md
 - Size: <bytes>
 
 ### P4 Verifier probe
@@ -214,4 +288,6 @@ The Coordinator's wrap-up must include:
 - [ ] W1 smoke test passes (workforce can be triggered at all).
 - [ ] W2 giga audit passes all 10 criteria.
 - [ ] If you intend to use workforce mode in production, re-run W2 after every Eigent update or prompt.py edit.
-- [ ] Audit artifacts stored at `E:/tmp/wf-audit-YYYY-MM-DD-NN/` (date + sequence). Do not reuse sequence numbers on the same day.
+- [ ] Audit artifacts stored at `E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/` (date + sequence). Do not reuse sequence numbers on the same day.
+- [ ] Run record at `E:/Logseq/audits/audit-YYYY-MM-DD-NN.md` covers what was run, what passed/failed, and any anomalies.
+- [ ] Front-facing chat output emitted with the 10-row PASS/FAIL table. Users saw the verdict without opening the doc.
