@@ -427,11 +427,84 @@ def _build_system_message(self, subagent_type: str, description: str) -> str:
 
 ---
 
+## P11 — Verifier URL-redirect rule baked into sys_prompt
+
+**File:** `E:\Eigent\resources\backend\app\agent\prompt.py` (mirrored at `E:\Eigent-source\backend\app\agent\prompt.py`).
+
+**Stock behavior:** `MULTI_MODAL_SYS_PROMPT` (the Verifier prompt, lines 208-297) had no explicit URL-reachability rule. The 308-to-200 false-fail on openhands.dev/docs.openhands.dev in the 2026-06-19 workforce validation run happened because the Verifier invented a strict "HTTP 200 only" rule from training data and applied it without instruction.
+
+**Patched behavior:** Added a new `<url_verification>` block immediately after `<collaboration>` (around line 273-283). The block explicitly says:
+- HTTP 200/201/204 = PASS.
+- HTTP 301/302/307/308 followed by 2xx = PASS (normal redirects, fetch with redirects enabled, report final code).
+- HTTP 4xx/5xx = FAIL.
+- Connection error/DNS failure/timeout = FAIL.
+
+**Why:** The W2 giga audit prompt already included the rule as user-prompt text, but if Anir (or any future test prompt) omits it from the user message, the Verifier will fall back to its training-data default and re-introduce the false-fail. Baking the rule into sys_prompt is belt-and-suspenders: applies regardless of user-prompt content.
+
+**Verification:** health test workforce-healthtest.md W2 criterion 8. If the Verifier marks any 308-to-200 as FAIL after this patch, either the patch was reverted or the model is overriding an explicit rule (deeper GLM-5.2 behavior ceiling, similar to T31).
+
+**Code (sketch):**
+```python
+MULTI_MODAL_SYS_PROMPT = """\
+<role>
+You are the Verifier, ...
+</role>
+...
+<collaboration>
+...
+</collaboration>
+
+<url_verification>
+When checking URL reachability, apply this rule strictly:
+- HTTP 200, 201, 204 = PASS.
+- HTTP 301, 302, 307, 308 that resolves to a 2xx final response = PASS. These
+  are normal permanent/temporary redirects (e.g., openhands.dev 308 →
+  www.all-hands.dev 200). Do NOT mark them FAIL. Fetch with redirects enabled
+  and report the FINAL code, not the intermediate.
+- HTTP 4xx, 5xx = FAIL.
+- Connection error, DNS failure, timeout = FAIL.
+Report each URL with: original URL | final URL (if redirected) | final HTTP | verdict.
+</url_verification>
+
+<tool_routing>
+...
+"""
+```
+
+---
+
+## P12 — Backend asyncio event loop hang (KNOWN ISSUE, no fix yet)
+
+**File:** `E:\Eigent\resources\backend\app\service\chat_service.py` (the suspect). Possibly also `app/agent/factory/browser.py` or `app/agent/factory/multi_modal.py`.
+
+**Symptom (observed 2026-06-19 14:05):** Eigent backend (uvicorn on port 5001) served `GET /` once with HTTP 200 + JSON body, then the asyncio event loop hung. Every subsequent probe (`/health`, `/docs`, `/api/v1/*`) timed out with HTTP 000 at 8-40s. Process alive, socket accepts, no HTTP response.
+
+**Suspects:**
+1. The `asyncio.to_thread(partial(browser_agent, ...))` and `asyncio.to_thread(partial(multi_modal_agent, ...))` wrappers (P2 regression fix). If `browser_agent()` or `multi_modal_agent()` internally call `asyncio.run()` or `loop.run_until_complete()` on the same running loop, the thread pool task will deadlock against the main loop.
+2. A prior in-UI chat dispatch that triggered a workforce run may have deadlocked and never released.
+3. A camel model call (GLM API) blocked indefinitely without timeout.
+
+**Diagnosis gap:** Eigent.exe does not surface uvicorn stderr to a file. Without per-request logging in the FastAPI app, we cannot tell which dispatch is stuck. Adding structured logging to `chat_service.py:construct_workforce` and `listen_chat_agent._aexecute_tool` would help, but is out of scope for this entry.
+
+**Recovery (user action):** close and restart Eigent.exe, OR `taskkill /PID <uvicorn-pid> /F` then relaunch. Restart loses in-UI session state. No in-app recovery path exists.
+
+**Verification:** health test T24 (`healthtest.md`) probes both 5001 (embedded) and 3001 (Docker). If T24 returns HTTP 000 for 5001 after a 90s post-login wait AND 3001 also fails, this issue is likely the cause.
+
+**Fix slot (TBD):** Options considered:
+- **(A) Add asyncio timeouts to every `await` in the workforce dispatch path.** Prevents indefinite hangs but adds complexity.
+- **(B) Refactor `browser_agent` and `multi_modal_agent` to be truly async-native** (no internal `asyncio.run` calls). Cleanest but largest scope.
+- **(C) Add a watchdog task** that kills stuck dispatches after N seconds. Brute force.
+- **(D) Surface uvicorn stderr to a log file** so the next hang can be diagnosed. Diagnostic only, not a fix.
+
+Recommend (D) first to pin the root cause, then decide between (A)/(B)/(C) based on what the log shows.
+
+---
+
 ## Apply order
 
 For a fresh install (stock Eigent), apply patches in this order:
 1. P4 (environment_hands.py) — unlocks the workspace.
-2. P1 (prompt.py) — bakes the ruleset in.
+2. P1 (prompt.py) — bakes the ruleset in (note: P11 is a sub-patch to the Verifier prompt section of prompt.py, apply together).
 3. P2 (chat_service.py) — wires Coordinator.
 4. P3 (toolkit_assembler.py) — fixes MCP loading, sanitizer, env vars.
 5. P5 (listen_chat_agent.py) — fixes hallucinated tool names and message_* kwargs.
@@ -440,8 +513,9 @@ For a fresh install (stock Eigent), apply patches in this order:
 8. P9 (Supabase MCP stdio switch) — config fix, not a code patch.
 9. P8 (headless CDP Chrome .bat) — runtime workaround, not a code patch.
 10. P10 — TBD.
+11. P12 — KNOWN ISSUE (backend hang), no fix yet. Diagnostic work recommended before any code change.
 
-After applying, run the health test from a fresh Eigent chat. Every AI/LOCATE test except T31 (PASS-with-concern) should pass. U01 (actual reboot) is the last gate.
+After applying, run the health test from a fresh Eigent chat. Every AI/LOCATE test except T31 (PASS-with-concern) should pass. U01 (actual reboot) is the last gate. If the backend hangs after workforce use, see P12.
 
 ## Mirror note
 

@@ -49,17 +49,28 @@ Trigger a multi-agent dispatch with a small task: ask the Researcher to fetch ex
 - Each worker exhibits behavior UNIQUE to its sys_prompt role.
 - Workers run in parallel when Coordinator declares no dependency; sequential when it does.
 - Parallel-stage workers do NOT see each other's first-pass output.
-- Coordinator has zero tools and never produces tool output itself (chat_service.py:2540-2548 empty-tool patch).
+- Coordinator has zero tools and never produces tool output itself (chat_service.py:2540-2548 — `agent_model(key, BaseMessage, options, [])` where `[]` is the empty tools list as the 4th positional arg).
 - Verifier runs last with explicit dependency on Implementer's output.
-- URL verification uses sensible redirect rules (HTTP 301/302/307/308 followed by 2xx = PASS, not FAIL).
+- URL verification uses sensible redirect rules (HTTP 301/302/307/308 followed by 2xx = PASS, not FAIL). The rule lives in two places: (a) the user-prompt below, and (b) the `<url_verification>` block inside `MULTI_MODAL_SYS_PROMPT` at `app/agent/prompt.py` so it applies even if the user-prompt is forgotten.
 - Every claim in the final doc traces to a tool call or verifiable artifact (anti-fabrication).
 
-**Setup:** Before dispatching, create the workspace dir. The agent will write the final report there.
+**Naming scheme for audit artifacts (mandatory):**
+- Workspace dir: `E:/tmp/wf-audit-YYYY-MM-DD-NN/` where `YYYY-MM-DD` is today's date and `NN` is a zero-padded sequence number starting at `01`. Bump NN if you re-run on the same day.
+- Final report: `audit-report.md` inside that dir.
+- Verifier table also exported as `audit-report.json` for machine parsing.
+- Example: first run on 2026-06-19 → `E:/tmp/wf-audit-2026-06-19-01/audit-report.md`. Second run same day → `wf-audit-2026-06-19-02/`.
 
-**Prompt (paste into Eigent multi-agent dispatch — replace `<TS>` with a timestamp like `2026-06-19T12-00`):**
+**Preflight (must pass before dispatch):**
+- Eigent backend alive on port **5001** (NOT 8000). Quick check: `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5001/health` should return `200` within 2s. If it returns `000` (timeout), the backend event loop is hung — see "Backend hang recovery" below.
+- `.mcp.json` at workspace root (`E:/Logseq/.mcp.json`), not at `E:/Eigent/`. T17 in `healthtest.md` covers this.
+- `E:/tmp/` writable.
+
+**Backend hang recovery:** if the preflight curl returns `000` repeatedly, the asyncio event loop is blocked (likely a stuck prior chat dispatch). Close and restart Eigent.exe, OR `taskkill /PID <pid> /F` the uvicorn process holding port 5001, then relaunch Eigent. Restart loses in-UI session state. This is the only known recovery.
+
+**Prompt (paste into Eigent multi-agent dispatch — replace `YYYY-MM-DD` with today's date and `NN` with the next sequence number):**
 
 ```
-You are running a Workforce Architecture Audit. Final deliverable: a structured results sheet at E:/tmp/wf-audit-<TS>/audit-report.md written by the Implementer, verified by the Verifier, with parallel contributions from the Researcher and Subject Analyst. The doc's primary purpose is to PROVE the 5-agent architecture is firing. Every claim must trace back to a tool call or a verifiable artifact on disk.
+You are running a Workforce Architecture Audit. Final deliverable: a structured results sheet at E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md written by the Implementer, verified by the Verifier, with parallel contributions from the Researcher and Subject Analyst. The doc's primary purpose is to PROVE the 5-agent architecture is firing. Every claim must trace back to a tool call or a verifiable artifact on disk.
 
 # Subject of the doc
 
@@ -91,13 +102,13 @@ Without reading any external URL, decompose this question: "What are the 3 most 
     (If you genuinely don't know which, write SEQUENTIAL_DISPATCH_LEAKED — Coordinator should have given you the dependency or not, and you can tell by checking your input.)
 
 ## P3 — Implementer probe (depends on P1 + P2)
-Write the final doc to E:/tmp/wf-audit-<TS>/audit-report.md.
+Write the final doc to E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md.
   - Cite the dependency task IDs from P1 and P2 (Coordinator provides these in the dispatch payload).
   - Use the Write tool to create the file.
   - After writing, run a Read on the file to confirm it exists and report its size in bytes.
 
 ## P4 — Verifier probe (depends on P3, runs LAST)
-Open E:/tmp/wf-audit-<TS>/audit-report.md and verify:
+Open E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md and verify:
   - File exists and word count is between 600 and 900.
   - All file:line citations in section 1 actually point to real lines. For each citation, Read the cited file:line and confirm the line content matches the claim.
   - All URLs in the doc are reachable. URL rule (READ CAREFULLY):
@@ -117,7 +128,7 @@ The Coordinator's wrap-up must include:
   - The list of task IDs created and which worker each went to.
   - One sentence: "Audit verdict: PASS" or "Audit verdict: FAIL (reason)".
 
-# Output structure of E:/tmp/wf-audit-<TS>/audit-report.md
+# Output structure of E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md
 
 # How Eigent's 5-Agent Workforce Routes a Task
 
@@ -150,7 +161,7 @@ The Coordinator's wrap-up must include:
 
 ### P3 Implementer probe
 - Dependency task IDs: <list from Coordinator>
-- File written: E:/tmp/wf-audit-<TS>/audit-report.md
+- File written: E:/tmp/wf-audit-YYYY-MM-DD-NN/audit-report.md
 - Size: <bytes>
 
 ### P4 Verifier probe
@@ -188,8 +199,8 @@ The Coordinator's wrap-up must include:
 - (5) fails: Subject Analyst didn't use Read/Glob on `E:/Eigent/`. Check that DOCUMENT_SYS_PROMPT (the Subject Analyst prompt) instructs source-file reading.
 - (6) fails with `SEQUENTIAL_DISPATCH_LEAKED`: dependency routing is leaking across parallel stages. This is a CAMEL workforce.py concern. Check whether Coordinator declared dependencies it shouldn't have, or whether camel's worker dependency-injection is over-eager.
 - (7) fails: Coordinator didn't pass dependency task IDs to Implementer. Check `COORDINATOR_SYS_PROMPT` dispatch_contract section is present and the Coordinator is following it.
-- (8) fails: Verifier's URL rule is too strict. The prompt above explicitly says 308-to-200 = PASS. If Verifier still marked it FAIL, the VERIFIER_SYS_PROMPT (or legacy MULTI_MODAL_SYS_PROMPT) is not loaded, or the model ignored the explicit rule.
-- (9) fails with non-zero Coordinator tool calls: the empty-tools patch at `chat_service.py:2540-2548` was reverted, or Coordinator is being created via a different code path that gives it tools. Re-apply PATCHES.md P2.
+- (8) fails: Verifier's URL rule is too strict. The rule is encoded in TWO places: (a) the user-prompt above, and (b) the `<url_verification>` block in `MULTI_MODAL_SYS_PROMPT` at `app/agent/prompt.py:273-283`. If Verifier still marked a 308-to-200 as FAIL, either both prompt locations were not loaded, or the model ignored the explicit rule (deeper model-behavior issue).
+- (9) fails with non-zero Coordinator tool calls: the empty-tools patch at `chat_service.py:2540-2548` (`agent_model(..., options, [])` where `[]` is the 4th positional arg) was reverted. The patch is positional, not keyword — a grep for `tools=[]` will return no matches even when the patch is present. To verify, read lines 2540-2548 directly and confirm the `[]` arg is there. Re-apply PATCHES.md P2 if missing.
 - (10) fails: workforce output contradicts itself. Cross-reference P4 Verifier table against P5 Coordinator verdict and identify which agent produced the inconsistent claim.
 
 **Notes:**
@@ -203,3 +214,4 @@ The Coordinator's wrap-up must include:
 - [ ] W1 smoke test passes (workforce can be triggered at all).
 - [ ] W2 giga audit passes all 10 criteria.
 - [ ] If you intend to use workforce mode in production, re-run W2 after every Eigent update or prompt.py edit.
+- [ ] Audit artifacts stored at `E:/tmp/wf-audit-YYYY-MM-DD-NN/` (date + sequence). Do not reuse sequence numbers on the same day.
