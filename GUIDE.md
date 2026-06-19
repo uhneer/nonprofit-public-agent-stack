@@ -16,6 +16,30 @@ Every step on earth, in order, so anyone can fully replicate the environment by 
 
 Secrets (API keys, tokens) stay on your machine and are never committed.
 
+**Person-agnostic by design.** This repo ships nameless. The ruleset (`files/nonprofitclaude.md`) refers to "the operator" throughout. `files/user.md` ships with blank fields including Name. When the operator first tells the agent their name (or any other durable fact), the agent's job is to fill `E:\Logseq\user.md` with that information; it does not need to rewrite the ruleset. The ruleset is name-agnostic, user.md is where personalization lives.
+
+---
+
+## Repository file map (unpack order)
+
+Every file in this repo has exactly one destination. An agent or human can unpack the stack by copying each file to its target path. Files are listed in install order, matches the step numbers below.
+
+| Repo file | Destination | Step | Notes |
+|---|---|---|---|
+| `files/nonprofitclaude.md` | `E:\Logseq\claude.md` | 4 | Rename on copy. The brain. |
+| `files/user.md` | `E:\Logseq\user.md` | 5 | Edit placeholders before saving. |
+| `files/nonprofitmemory.md` | `E:\Logseq\memory.md` | 7 | Template. Real entries get appended over time. |
+| `files/eigent-mcp.json` | import via Eigent UI (writes to `~/.eigent/mcp.json`) | 13 | Substitute `${...}` env vars first, or set them as user env vars. |
+| `files/eigent-headless-chrome.bat` | `shell:startup` (i.e. `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`) | 18b | Portable, uses `%USERPROFILE%` and `%ProgramFiles%`. No edits needed. |
+| `files/eigent-backend/*` (7 files) | `E:\Eigent\resources\backend\app\` matching subpaths | 13b | Drop-in replacement for stock backend files. Skip PATCHES.md apply step. |
+
+Files that do NOT ship in this repo and how to get them:
+- **Stock Eigent backend files** (`prompt.py`, `chat_service.py`, etc.) ship as patched drop-ins at `files/eigent-backend/`. If you prefer to patch stock files yourself, the originals are at `E:\Eigent\resources\backend\app\` after installing Eigent; back them up, then apply [PATCHES.md](PATCHES.md) in place. The drop-in and the patch paths produce equivalent results; pick one.
+- **`claude.md` (the ruleset upstream)** — same content as `files/nonprofitclaude.md`, mirror of `https://github.com/uhneer/nonprofit-agent-rules`. Use either source.
+- **Settings DB** — Eigent stores provider config, MCP imports, and UI state in its own settings DB (under `~/.eigent/`). Configured via the Settings UI, not by dropping files.
+
+After every file is in place, run the [health test](healthtest.md). If anything fails, the troubleshooting table at the bottom of this guide maps symptoms to fixes.
+
 ---
 
 ## Step 0 — Buy the z.ai GLM Coding plan
@@ -202,15 +226,9 @@ Replace every template placeholder with real, durable facts about you:
 
 ---
 
-## Step 6 — `soul.md` (optional persona)
+## Step 6 — (removed)
 
-### 6.1 Copy
-1. From this repo, copy [files/soul.md](files/soul.md) to `E:\Logseq\soul.md`.
-2. Edit it to one or two lines of persona, or skip the file entirely. `claude.md` section 1 already owns voice, so `soul.md` is optional.
-
-### 6.2 Verify
-1. If you skipped, no verify needed.
-2. If you filled it, ask in chat: `Read E:/Logseq/soul.md and confirm what it says about you.`
+The previous `soul.md` persona step is dropped. `claude.md` §1 owns voice; a separate persona file is not load-bearing for this stack. Step number left in place to avoid renumbering cascade.
 
 ---
 
@@ -238,13 +256,13 @@ Write memory in compressed Chinese plus English technical terms, append-only, no
 ### 7.5 Eigent agent notes (separate from Logseq memory)
 Eigent has its own agent-shared memory layer: `append_note`, `read_note`, and a `shared_files` note. Use it for transient working state within a chat or across chats. Use `E:\Logseq\memory.md` for durable facts you want to survive an Eigent reinstall. Health test T30 exercises the notes path.
 
-Eigent does not have CodePilot's auto-memory layer keyed by workspace path. There is no per-conversation memory toggle to worry about, the ruleset section 11 (cave-speak) is the only memory rule that governs writes.
+Eigent's auto-memory is limited to those in-chat notes. Durable cross-session memory in this stack is the Logseq manual store governed by `claude.md` §11 (cave-speak). No per-conversation memory toggle to worry about, the ruleset is the only memory rule that governs writes.
 
 ---
 
 ## Step 8 — ripgrep
 
-Fast code search the agent prefers over plain grep. Required, not optional, the ruleset §4 enforces `rg --json` structured output.
+Fast code search the agent prefers over plain grep. Required, not optional: the operating rules baked into `prompt.py` (anir_operating_rules §4) enforce `rg --json` structured output. The user-facing ruleset (`claude.md`) does not reference ripgrep by name; enforcement comes from the baked-in system prompt.
 
 ### 8.1 Install
 1. `Start menu`, type `cmd`, Enter to open Command Prompt.
@@ -458,20 +476,12 @@ With the patch (applied in step 13b): everything just works after import.
 
 ---
 
-## Step 13b — Apply the Eigent backend patches
+## Step 13b — Drop in the patched backend files
 
-This is the part that turns a stock Eigent install into the 5-agent workforce with the ruleset-aware prompt. Read [PATCHES.md](PATCHES.md) before applying anything. Read it again before debugging weird agent behavior.
+This is the part that turns a stock Eigent install into the 5-agent workforce with the ruleset-aware prompt. The repo ships the full patched versions of all 7 backend files. Copy them in; skip manual patching.
 
 ### 13b.1 Find the backend source
-1. Windows Explorer, navigate to `E:\Eigent\resources\backend\app\`.
-2. The files you will patch are:
-   - `agent\prompt.py`
-   - `service\chat_service.py`
-   - `agent\factory\toolkit_assembler.py`
-   - `agent\environment_hands.py`
-   - `agent\listen_chat_agent.py`
-   - `agent\toolkit\depth_limited_agent_toolkit.py`
-   - `agent\tool\browser.py` (only if your build has the import break)
+Windows Explorer, navigate to `E:\Eigent\resources\backend\app\`. This is the target directory.
 
 ### 13b.2 Back up the stock files first
 Open Command Prompt:
@@ -480,43 +490,52 @@ cd E:\Eigent\resources\backend\app
 copy agent\prompt.py agent\prompt.py.bak
 copy service\chat_service.py service\chat_service.py.bak
 copy agent\factory\toolkit_assembler.py agent\factory\toolkit_assembler.py.bak
-copy agent\environment_hands.py agent\environment_hands.py.bak
+copy agent\factory\browser.py agent\factory\browser.py.bak
+copy hands\environment_hands.py hands\environment_hands.py.bak
 copy agent\listen_chat_agent.py agent\listen_chat_agent.py.bak
 copy agent\toolkit\depth_limited_agent_toolkit.py agent\toolkit\depth_limited_agent_toolkit.py.bak
-copy agent\tool\browser.py agent\tool\browser.py.bak
 ```
 Keep the `.bak` files; they are the restore path.
 
-### 13b.3 Apply each patch in order
-Follow the patch entries in [PATCHES.md](PATCHES.md) in numerical order (P1 through P9). Each entry has the file path, the code diff, and the verification step.
+### 13b.3 Copy the drop-in files
+The repo ships 7 patched backend files at [files/eigent-backend/](files/eigent-backend/), mirroring the backend tree:
+- `agent/prompt.py`
+- `agent/listen_chat_agent.py`
+- `agent/factory/browser.py`
+- `agent/factory/toolkit_assembler.py`
+- `agent/toolkit/depth_limited_agent_toolkit.py`
+- `hands/environment_hands.py`
+- `service/chat_service.py`
 
-Apply order (most important first):
-1. **P4** (environment_hands.py) — unlocks the workspace. Without this, the agent cannot read `E:\Logseq\`.
-2. **P1** (prompt.py) — bakes the ruleset in.
-3. **P2** (chat_service.py) — wires Coordinator. **Includes the asyncio.gather bugfix for browser_agent.**
-4. **P3** (toolkit_assembler.py) — fixes MCP loading, sanitizer, env vars.
-5. **P5** (listen_chat_agent.py) — fixes hallucinated tool names and message_* kwargs.
-6. **P6** (depth_limited_agent_toolkit.py) — anti-fabrication rules.
-7. **P7** (browser.py) — restore (only if your build has the import break).
-8. **P9** (Supabase MCP stdio switch) — config fix, already done in step 12b.
-9. **P8** (headless CDP Chrome .bat) — runtime workaround, see step 18b.
-10. **P10** — TBD (T31 sub-agent fabrication, parent-side verification, not yet shipped).
-
-### 13b.4 Mirror to the source copy
-If you have a second Eigent source tree at `E:\Eigent-source\backend\` (used for reading and diffing), apply the same patches there:
+Copy each file to its matching subpath under `E:\Eigent\resources\backend\app\`. Example using Command Prompt:
 ```
-cd E:\Eigent-source\backend\app
-copy agent\prompt.py agent\prompt.py.bak
-:: etc, then apply each patch
+xcopy /Y "E:\Games\nonprofit-agent-stack\files\eigent-backend\*.*" "E:\Eigent\resources\backend\app\" /E
 ```
+This preserves the subdirectory structure (`agent/`, `agent/factory/`, `agent/toolkit/`, `hands/`, `service/`).
 
-### 13b.5 Restart Eigent
+### 13b.4 What each file does (overview)
+For the why behind each patch, see [PATCHES.md](PATCHES.md). The short version:
+- **environment_hands.py** (P4) — adds `E:\` as an allowed filesystem root so the agent can read `E:\Logseq\` without moving it under your home dir.
+- **prompt.py** (P1) — bakes the operating ruleset (`anir_operating_rules` §0-§14) into every agent. Includes Coordinator dispatch protocol, anti-fabrication rules, URL verification.
+- **chat_service.py** (P2) — wires the Coordinator role + asyncio.gather bugfix for browser_agent.
+- **toolkit_assembler.py** (P3) — disk-config bridge for MCP loading, sanitizer empty-string coercion, env var handling.
+- **listen_chat_agent.py** (P5) — sanitizer interception fix (wraps async_call too), handles hallucinated tool names gracefully.
+- **depth_limited_agent_toolkit.py** (P6) — anti-fabrication enforcement.
+- **browser.py** (P7) — headless CDP browser toolkit integration.
+
+### 13b.5 Optional: mirror to the source copy
+If you keep a second Eigent source tree at `E:\Eigent-source\backend\` for reading and diffing, repeat the same xcopy against that target.
+
+### 13b.6 Restart Eigent
 1. Right-click the tray icon, **Quit**.
 2. Wait 5 seconds.
 3. `Start menu`, type `Eigent`, Enter.
 
-### 13b.6 Verify each patch is live
+### 13b.7 Verify each patch is live
 Run health tests T13, T13b, T13c, T13d in a fresh chat. Each test prompts the agent to open a patched file and report what it sees. All four should PASS before you continue.
+
+### 13b.8 Patch-apply alternative (skip unless you have a heavily-modified backend)
+If your backend is already customized and you cannot drop in the full files, fall back to applying individual diffs from [PATCHES.md](PATCHES.md). Read PATCHES.md P1-P9 in numerical order, apply each diff manually. P10 (T31 sub-agent fabrication) has no fix yet, parent-side verification only.
 
 ---
 
@@ -535,7 +554,9 @@ The actual timeout layer is client-side, in Eigent or CAMEL, not at z.ai's edge.
 It is a paas/v4 (OpenAI-format) flag only. On `/api/anthropic` it is silently ignored, verified by direct test (233s silent generation with the flag set, no incremental streaming).
 
 ### 14.5 Permissions
-Eigent has no CodePilot-style skip-permissions toggle. The equivalent is per-tool gating via the agent's own system prompt and via hooks if you build them. If you want unattended binges, make sure your hooks (if any) allow the tools you expect to use, and keep at least one gate (the Telegram bridge allowlist in step 16, or a per-tool hook).
+Eigent does not have a "skip all permission prompts" toggle. The equivalent is per-tool gating: either via the agent's own system prompt (the ruleset) or via a pre-tool hook you build into the backend (see step 19). For unattended runs, make sure your hooks allow the tools you expect to use, and keep at least one gate (the Telegram bridge allowlist in step 16, a git-push pre-hook per step 19.2, or equivalent).
+
+A reasonable allowlist surface for this stack: `Read`, `Edit`, `Write`, `Bash(git*)`, `Bash(rg*)`. Everything else, gate manually.
 
 ### 14.6 Security note
 Unattended, plus a remote bridge, plus stealth web, all at once, means anyone who reaches the bridge drives a fully ungated agent on your machine. Keep at least one gate.
@@ -562,7 +583,7 @@ Lets the agent self-format instead of hand-fixing style. Less token waste, fewer
 
 ## Step 16 — Telegram bridge (approve from phone)
 
-> **Status note.** Eigent's Telegram bridge is not as polished as CodePilot's. Check the current state in the Eigent repo before relying on it. If the bridge is unavailable in your version, the Sunshine + Moonlight remote-desktop layer in step 17 covers the same "approve from phone" use case with a real desktop.
+> **Status note.** Eigent's Telegram bridge is community-contributed and may lag behind the core. Check the current state in the Eigent repo before relying on it. If the bridge is unavailable in your version, the Sunshine + Moonlight remote-desktop layer in step 17 covers the same "approve from phone" use case with a real desktop.
 
 ### 16.1 Create the bot
 1. Open Telegram (phone or desktop). Search for `@BotFather`.
@@ -726,28 +747,12 @@ Eigent's renderer auto-launches a **visible** Chrome (no `--headless` flag in `e
 1. Win+R, type `shell:startup`, Enter.
 2. Windows Explorer opens at `C:\Users\<you>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`.
 
-### 18b.3 Create the .bat file
-1. In that folder, right-click empty space, **New** > **Text Document**.
-2. Rename it to `eigent-headless-chrome.bat` (accept the extension change warning).
-3. Right-click, **Edit** (or open in Notepad).
-4. Paste (substitute `<you>` for your actual username in two places):
-```bat
-@echo off
-rem Eigent headless CDP Chrome — keep pool non-empty so chatStore auto-launch never fires.
-if /i "%EigHeadlessChrome%"=="0" exit 0
-powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://127.0.0.1:9224/json/version' -UseBasicParsing -TimeoutSec 1).StatusCode | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
-if %ERRORLEVEL%==0 exit 0
-start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
-  --headless=new ^
-  --remote-debugging-port=9224 ^
-  --user-data-dir="C:\Users\<you>\.eigent\browser_profiles\headless_startup" ^
-  --no-first-run ^
-  --no-default-browser-check ^
-  --disable-blink-features=AutomationControlled ^
-  about:blank
-exit 0
-```
-5. Save, close Notepad.
+### 18b.3 Drop in the .bat file
+1. From this repo, copy [files/eigent-headless-chrome.bat](files/eigent-headless-chrome.bat) into the Startup folder you just opened.
+2. No edits needed. The .bat uses `%USERPROFILE%` and `%ProgramFiles%`, so it is portable across Windows usernames.
+3. The shipped .bat also auto-creates the profile directory if missing, and includes a kill-switch env var (`EigHeadlessChrome=0`).
+
+If you would rather write the .bat yourself, see the file in the repo for the exact contents. The previous paste-in version has been retired in favor of the shipped file.
 
 ### 18b.4 Add the external CDP browser to Eigent
 1. Open Eigent. Settings.
@@ -774,7 +779,7 @@ Patch `electron/main/index.ts:867` to add `'--headless=new'` to the spawn args a
 
 ## Step 19 — Optional hooks
 
-Eigent does not honor `.claude/settings.json` hooks natively. If you want pre-tool or post-tool hooks, you have to build them in Eigent's own backend (or wait for a future Eigent release that exposes a hook config). The file [files/claude-settings.json](files/claude-settings.json) is kept as reference for what a typical hook setup looks like in the CodePilot world, treat it as a blueprint only.
+Eigent does not honor a `.claude/settings.json` natively. If you want pre-tool or post-tool hooks, you build them in Eigent's own backend (or wait for a future Eigent release that exposes a hook config).
 
 ### 19.1 If you want to build a hook in Eigent
 1. Find the tool dispatch path in `listen_chat_agent.py` (around `_aexecute_tool`).
@@ -805,7 +810,6 @@ Tick each box. The build is not done until all are checked.
 - [ ] Logseq graph at `E:\Logseq`, workspace bound via Create space > Use local folder > `E:\Logseq` (step 3).
 - [ ] `claude.md` at workspace root, first line is `# Nonprofit Agent 操作准则` (step 4).
 - [ ] `user.md` filled with real details (step 5).
-- [ ] `soul.md` present or intentionally skipped (step 6).
 - [ ] `memory.md` and `memory/` folder created (step 7).
 - [ ] ripgrep on PATH, `where rg` resolves, version 15.1.0+ (step 8).
 - [ ] Context7 MCP verified startable via `npx -y @upstash/context7-mcp` (step 9).

@@ -294,7 +294,7 @@ Top recommendation: <name + one-line reason>
 Doc: E:/Logseq/audits/wf-proj-YYYY-MM-DD-NN/deliverable.md
 Verifier stats: <URLs checked> URLs / <PASS> pass / <FAIL> fail | <claims checked> claims / <verified> verified
 Confidence: HIGH | MEDIUM | LOW — <one-sentence reason>
-Next steps for Anir: <2-3 concrete actions or open questions>
+Next steps for the operator: <2-3 concrete actions or open questions>
 ```
 
 If the workforce cannot produce the doc, the Coordinator still emits this block with Verdict: FAIL and a one-sentence reason. Silence is not acceptable.

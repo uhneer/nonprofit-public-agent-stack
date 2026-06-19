@@ -60,7 +60,7 @@ SINGLE_AGENT_SYS_PROMPT = (
     "<stock factory prompt>"
     + "\n\n<anir_operating_rules>"
     + "\n## 0. 优先级（平局以此为准）"
-    + "\n- Anir 的意图和体验第一..."
+    + "\n- the operator 的意图和体验第一..."
     + "\n## 1. 文风（本文件也遵守）"
     # ... sections 2 through 14 ...
     + "\n## 14. 发送前，重读一遍"
@@ -238,7 +238,7 @@ args = _sanitize_kwargs(tool, args)
 
 ## P4 — environment_hands.py E:\ allowlist
 
-**File:** `E:\Eigent\resources\backend\app\agent\environment_hands.py` (mirrored)
+**File:** `E:\Eigent\resources\backend\app\hands\environment_hands.py` (mirrored)
 
 **Stock behavior:** The agent's file access is allowlisted to user-profile directories (`C:\Users\<you>\`). Any path outside that is "not available to this Brain."
 
@@ -355,7 +355,7 @@ def _build_system_message(self, subagent_type: str, description: str) -> str:
 
 ## P7 — browser.py restore after _cdp_pool_manager import break
 
-**File:** `E:\Eigent\resources\backend\app\agent\tool\browser.py` (mirrored)
+**File:** `E:\Eigent\resources\backend\app\agent\factory\browser.py` (mirrored)
 
 **Stock behavior (in some Eigent builds):** An upstream refactor moved `_cdp_pool_manager` to a different module but did not update `browser.py`'s import. Result: `ImportError` on agent startup, the entire browser tool path is dead, and the CDP auto-launch workaround (P8) is also dead.
 
@@ -439,7 +439,7 @@ def _build_system_message(self, subagent_type: str, description: str) -> str:
 - HTTP 4xx/5xx = FAIL.
 - Connection error/DNS failure/timeout = FAIL.
 
-**Why:** The W2 giga audit prompt already included the rule as user-prompt text, but if Anir (or any future test prompt) omits it from the user message, the Verifier will fall back to its training-data default and re-introduce the false-fail. Baking the rule into sys_prompt is belt-and-suspenders: applies regardless of user-prompt content.
+**Why:** The W2 giga audit prompt already included the rule as user-prompt text, but if the operator (or any future test prompt) omits it from the user message, the Verifier will fall back to its training-data default and re-introduce the false-fail. Baking the rule into sys_prompt is belt-and-suspenders: applies regardless of user-prompt content.
 
 **Verification:** health test workforce-healthtest.md W2 criterion 8. If the Verifier marks any 308-to-200 as FAIL after this patch, either the patch was reverted or the model is overriding an explicit rule (deeper GLM-5.2 behavior ceiling, similar to T31).
 

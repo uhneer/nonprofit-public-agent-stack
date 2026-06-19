@@ -1,6 +1,6 @@
 # Eigent Health Test
 
-End-to-end verification that every layer of the Eigent + GLM-5.2 + MCP stack actually works. Built specifically for the Eigent harness (not CodePilot, not Claude Code). Run this after a fresh install, after migrating from another harness, after an OS update or machine rebuild, after a major config change, or any time something feels off. Each test has an ID, one thing it proves, the prompt or command, the pass criterion, and the failure hint pointing back to GUIDE.md.
+End-to-end verification that every layer of the Eigent + GLM-5.2 + MCP stack actually works. Run this after a fresh install, after an OS update or machine rebuild, after a major config change, or any time something feels off. Each test has an ID, one thing it proves, the prompt or command, the pass criterion, and the failure hint pointing back to GUIDE.md.
 
 ## How to use this file
 
@@ -168,7 +168,7 @@ For tests in this layer, the agent should use `shell_exec` (or equivalent termin
 **Fail hint:** if the bridge is missing, MCPs added via UI won't reach agent runs even after restart. Re-apply from PATCHES.md. If error logging is still generic, silent MCP failures will recur.
 
 ### T13d — sanitizer interception in listen_chat_agent `[LOCATE]`
-**Proves:** GLM's null/empty-string emissions in MCP tool kwargs are intercepted before the tool runs. Without this, MCP tools that reject null values fail silently. The patch wraps `async_call` (not just `__call__`) because the agent calls `tool.func.async_call` directly (listen_chat_agent.py:617), bypassing `FunctionTool.__call__`.
+**Proves:** GLM's null/empty-string emissions in MCP tool kwargs are intercepted before the tool runs. Without this, MCP tools that reject null values fail silently. The patch wraps `async_call` (not just `__call__`) because the agent calls `tool.func.async_call` directly (listen_chat_agent.py:656), bypassing `FunctionTool.__call__`.
 **Prompt:** `Open E:/Eigent/resources/backend/app/agent/listen_chat_agent.py. Report: (a) does _aexecute_tool route through a sanitizer that strips null/empty-string kwargs? (b) does the sanitizer wrap async_call, not just __call__? (c) when a tool name is hallucinated (not in self._internal_tools), does the method return a graceful error result instead of raising KeyError?`
 **Pass:** all three checks yes.
 **Fail hint:** if hallucinated tool names still crash the turn, the _aexecute_tool pre-check patch is missing. Re-apply from PATCHES.md.
@@ -182,11 +182,11 @@ For tests in this layer, the agent should use `shell_exec` (or equivalent termin
 ### T15 — user.md filled `[LOCATE]`
 **Proves:** user.md is not still the template.
 **Prompt:** `Read E:/Logseq/user.md. Is it still the template, or is it filled in? Show me the "Who I am" section.`
-**Pass:** real name (Anir), real role, real languages. Not the blank template.
+**Pass:** real name (the operator), real role, real languages. Not the blank template.
 **Fail hint:** if template, GUIDE.md step on user.md was skipped.
 
 ### T16 — memory system `[LOCATE]`
-**Proves:** the Logseq manual memory system is set up. (Eigent doesn't have CodePilot's auto-memory at `C:/Users/.../.claude/projects/...`; agent memory in Eigent lives in `append_note` / `shared_files` notes, tested separately in T30.)
+**Proves:** the Logseq manual memory system is set up. (Eigent's only auto-memory is in-chat `append_note` / `shared_files` notes, tested separately in T30. Durable cross-session memory lives in `E:/Logseq/memory.md` governed by `claude.md` §11.)
 **Prompt:** `Check the memory system. Does E:/Logseq/memory.md exist? Does E:/Logseq/memory/ have files in it? Show the first 10 lines of memory.md.`
 **Pass:** both exist. At least one has actual entries (not just the template header).
 **Fail hints:**
@@ -210,13 +210,13 @@ For tests in this layer, the agent should use `shell_exec` (or equivalent termin
 ## Layer 4 — Services and CLI
 
 ### T19 — ripgrep installed and preferred `[AI]`
-**Proves:** `rg.exe` (ripgrep 15.1.0+) is on PATH and the agent prefers it over plain `grep` per the patched ruleset §4 ("ripgrep 15.1.0 已装, 优先 `rg --json` 结构化输出").
+**Proves:** `rg.exe` (ripgrep 15.1.0+) is on PATH and the agent prefers it over plain `grep` per the operating rules baked into `prompt.py` (anir_operating_rules §4: "ripgrep 15.1.0 已装, 优先 `rg --json` 结构化输出"). Not the user-facing `claude.md` ruleset, which is name-agnostic about tools.
 **Prompt:** `Run "rg --version" and report the version. Then run "rg --json TODO E:/Eigent/resources/backend/app/agent/prompt.py" (or any small file) and report whether you get structured JSON output. Also run "where rg" to confirm the binary is on PATH.`
 **Pass:** (a) `rg --version` reports version 15.1.0 or higher, AND (b) `rg --json` produces structured JSON output (parseable, contains `"type":"match"` entries or empty array if no matches), AND (c) `where rg` resolves to a real .exe path.
-**Fail hint:** if `rg` is missing, install via `winget install BurntSushi.ripgrep.MSVC`. If installed but `where rg` can't find it, the winget Links directory (`C:/Users/Anira/AppData/Local/Microsoft/WinGet/Links`) is not on PATH, add it.
+**Fail hint:** if `rg` is missing, install via `winget install BurntSushi.ripgrep.MSVC`. If installed but `where rg` can't find it, the winget Links directory (`C:/Users/the operatora/AppData/Local/Microsoft/WinGet/Links`) is not on PATH, add it.
 
 ### T19b — fd and jq must NOT be expected `[AI]`
-**Proves:** the agent knows its real tool surface. Per the patched ruleset §4: "`fd` 未装, 目录遍历用 `find`. `jq` 未装, JSON 处理用 Python `json` 模块 via shell_exec." The agent should NOT silently fall back to pretending these exist.
+**Proves:** the agent knows its real tool surface. Per the operating rules baked into `prompt.py` (anir_operating_rules §4): "`fd` 未装, 目录遍历用 `find`. `jq` 未装, JSON 处理用 Python `json` 模块 via shell_exec." The agent should NOT silently fall back to pretending these exist.
 **Prompt:** `Run "where fd" and "where jq". Report exactly what you see. If both return "INFO: Could not find files..." or equivalent "not found", that is correct and expected. Then describe what you would use instead for (a) finding files by name pattern, (b) parsing JSON from a shell pipe.`
 **Pass:** (a) `where fd` reports not found, AND (b) `where jq` reports not found, AND (c) the agent's alternatives are `find` (for file lookup) and Python `json` module via shell_exec (for JSON parsing). Bonus: agent explicitly cites §4 of the ruleset.
 **Fail hint:** if `fd` or `jq` IS installed, the §4 rule is stale. Update prompt.py to reflect what's actually on PATH. If the agent tries to use `fd`/`jq` and fails, it ignored the §4 rule.
@@ -317,7 +317,7 @@ Report every line printed. Then state explicitly: did ANY port reach HTTP 200?`
 
 ### T33 — Docker autostart `[AI]`
 **Proves:** Docker engine comes back at login.
-**Prompt:** `Run `python -c "import json; print('AutoStart =', json.load(open(r'C:/Users/Anira/AppData/Roaming/Docker/settings-store.json'))['AutoStart'])"` and report.`
+**Prompt:** `Run `python -c "import json; print('AutoStart =', json.load(open(r'C:/Users/the operatora/AppData/Roaming/Docker/settings-store.json'))['AutoStart'])"` and report.`
 **Pass:** `AutoStart = True`.
 **Fail hint:** Docker Desktop, Settings, General, tick "Start Docker Desktop when you sign in to your computer".
 
@@ -448,12 +448,11 @@ When the whole checklist is green, the stack is verified end-to-end. Do not call
 
 ## Migration note
 
-This healthtest is the Eigent-native replacement for the older CodePilot-flavored test. Differences from the old test:
-- Dropped CodePilot-only scaffolding tests (HEARTBEAT.md, .claude/settings.json enforcement, CodePilot auto-memory path).
-- Added Eigent-specific capability tests (Skills T29, Notes T30, RemoteSubAgent T31, multi-agent T32).
-- Added ruleset tests for tool routing (T41) and ponytail ladder (T42).
-- Added T13b (chat_service.py Coordinator wiring), T13c (toolkit_assembler disk-config bridge), T13d (listen_chat_agent sanitizer interception).
-- T19 enforces ripgrep as a requirement, not a recommendation (ruleset §4 enforces `rg --json`).
+This healthtest is the Eigent-native verification suite. The structure intentionally covers:
+- Backend patch verification (T13/T13b/T13c/T13d, each opens a patched file and confirms the expected content).
+- Capability tests (Skills T29, Notes T30, RemoteSubAgent T31, multi-agent T32).
+- Ruleset behavior tests (T41 tool routing, T42 ponytail ladder, T43 reboot persistence).
+- T19 enforces ripgrep as a requirement, not a recommendation.
 - T03 reframed: thinking mode is inherited from the Coding Plan endpoint, not a UI toggle.
 - T24 retries both 5001 (embedded) and 3001 (Docker) backends to handle the boot-time race.
 - T31 documented as PASS-with-concern: anti-fabrication rules are live but the base model still fabricates in this isolated sub-agent path. Fix is TBD (parent-side verification).
