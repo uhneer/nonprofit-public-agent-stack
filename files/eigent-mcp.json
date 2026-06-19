@@ -1,0 +1,32 @@
+{
+  "_comment": "Lean MCP set for Eigent. Import via Eigent's Connectors -> MCP -> Add -> Local JSON (or add each server individually). Replace <...> placeholders with your real tokens. Never commit real tokens. Port 8888 for SearXNG is deliberate: 8080 is Open WebUI / Jenkins / Tomcat default and SearXNG silently returns HTML (not JSON) when it cannot bind, which breaks mcp-searxng with a misleading 'Invalid JSON format' error. Use 8888 unless you know 8080 is free. See GUIDE.md steps 9-12b and healthtest.md T06-T12. NOTE: Supabase uses local stdio, NOT the remote OAuth-only endpoint at https://api.supabase.com/mcp/v1 (which rejects personal access tokens with 'Session terminated'). The stdio server honors SUPABASE_ACCESS_TOKEN. See GUIDE.md step 12b.",
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "scrapling": {
+      "command": "scrapling",
+      "args": ["mcp"]
+    },
+    "searxng": {
+      "command": "npx",
+      "args": ["-y", "mcp-searxng"],
+      "env": { "SEARXNG_URL": "http://127.0.0.1:8888" }
+    },
+    "github": {
+      "type": "streamable_http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    },
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@latest"],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

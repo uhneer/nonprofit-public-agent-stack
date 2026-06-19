@@ -2,6 +2,8 @@
 
 Lock in every layer, in order. One step per component. Each step says what it is, the exact codebase, the commands, where the file goes, and how to verify. Secrets (API keys, tokens) stay on your machine and are never committed. Commands assume Windows; adjust paths for your OS.
 
+This is the **Eigent** build. If you are migrating from CodePilot, every step below is the new path; the only old-config artifact worth keeping is your z.ai API key.
+
 ---
 
 ## Step 0 — Buy the z.ai GLM Coding plan
@@ -18,36 +20,32 @@ The cheap frontier model the whole stack rides on. Buy this first.
    - OpenAI-format (do not use with this stack): `https://api.z.ai/api/paas/v4` — Coding plan keys are scoped to the coding endpoints and rejected here.
 - **Verify:** you have an API key string and the base URL.
 
-## Step 1 — Install CodePilot
+## Step 1 — Install Eigent
 
-The desktop agent app. Multi-model, Claude Agent SDK runtime, MCP support, remote bridge.
+The desktop agent app. Electron UI plus Python backend, CAMEL-AI runtime, MCP support, multi-agent workforce, skills.
 
-- Codebase: [github.com/op7418/CodePilot](https://github.com/op7418/CodePilot) · docs: [codepilot.sh](https://www.codepilot.sh/docs/providers)
-1. Download a release from the repo, or build from source.
-2. Launch it once so it creates `~/.codepilot/codepilot.db`.
-- **Verify:** the app opens and shows Settings.
+- Codebase: [github.com/EigentAI/eigent](https://github.com/EigentAI/eigent)
+1. Download a release installer from the repo, or clone and build from source.
+2. Launch it once. On first launch it creates `~/.eigent/` (config, MCP, venvs) and binds a workspace folder.
+3. Eigent ships two backends: an **embedded** backend on port 5001 (starts with the desktop app) and a **Docker** backend on port 3001 (optional, `docker compose up eigent_api` from the repo). Either can serve agent traffic.
+- **Verify:** the app opens, the tray icon shows, and after 30-60s `curl http://127.0.0.1:5001/health` returns 200 (or 3001 if you started the Docker backend).
 
 ## Step 2 — Connect the z.ai provider
 
-- In CodePilot: Settings, Providers, Add provider.
-  - Type: **Anthropic-compatible**
-  - Base URL: `https://open.bigmodel.cn/api/anthropic`
-  - API key: your z.ai key (step 0)
-  - Model name: `glm-5.2`
-- Advanced Options, Extra Environment Variables, paste:
-  ```json
-  { "API_TIMEOUT_MS": "3000000" }
-  ```
-- Set default model to `glm-5.2`. If the provider catalog exposes role models, set `sonnet -> GLM-5-Turbo`, `opus -> GLM-5.1`, `haiku -> GLM-4.5-Air`.
-- **Verify:** send a one-line prompt, get a GLM reply.
+- In Eigent: Settings, Models, Anthropic card.
+  - API Host: `https://open.bigmodel.cn/api/anthropic`
+  - API Key: your z.ai key (step 0)
+  - Model Type: `glm-5.2`
+  - Prefer: **on** (this card should win over any other provider card)
+- Thinking mode is inherited from the Coding Plan endpoint. No UI toggle to set. Zhipu's docs confirm interleaved thinking is the default for Coding Plan users on `/api/anthropic`.
+- **Verify:** send a one-line prompt in any chat, get a GLM reply. Ask "what model are you" and the answer should name GLM-5.2.
 
 ## Step 3 — Install Logseq and make the workspace
 
 - Site: [logseq.com](https://logseq.com)
 1. Install Logseq, create a new graph, for example a folder `E:\Logseq` on a fast drive.
-2. In CodePilot, set the assistant workspace path and default work dir to that folder.
-3. CodePilot scaffolds `README.ai.md`, `PATH.ai.md`, `HEARTBEAT.md`. Leave them.
-- **Verify:** CodePilot's file tree shows the Logseq folder.
+2. In Eigent: Create space, **Use local folder**, pick `E:\Logseq`. This binds the folder as the agent's workspace and unlocks file read/write inside it (and inside `E:\` generally, after the environment_hands.py patch in step 13b).
+- **Verify:** Eigent's file browser shows the Logseq folder contents (claude.md will appear after step 4).
 
 ## Step 4 — Drop in the instruction ruleset (`claude.md`)
 
@@ -77,21 +75,19 @@ The brain: priorities, voice, long-run behavior, web-verify discipline, tool-cal
 2. Write memory in compressed Chinese plus English technical terms, append-only, no secrets. See the file for the rule.
 - **Verify:** `memory.md` exists and the `memory/` folder is present.
 
-> **Turning memory off for a specific conversation**
-> CodePilot has no native per-conversation memory toggle (verified in `codepilot.db` settings, 2026-06-18). Three workarounds, in order of cleanliness:
-> 1. **Use a different working directory for that session.** Auto-memory is keyed by workspace path. The harness stores it at `C:\Users\<you>\.claude\projects\<workspace-slug>\memory\`. A session pointed at `E:\Scratch` instead of `E:\Logseq` has no memory and writes none. This is the clean option. The `chat_sessions` table has per-row `working_directory` so each session is independent.
-> 2. **Rename the memory folder.** Move `C:\Users\<you>\.claude\projects\<workspace-slug>\memory\` to `memory.disabled\` for the duration. Move it back to re-enable. Crude but reversible.
-> 3. **Strip the memory block from a session's system prompt.** Each `chat_sessions` row has its own `system_prompt` field. Remove the `<assistant-memory-guidance>` block and that session will not read or write memory. Requires direct DB editing.
+> **Eigent agent notes (separate from Logseq memory)**
+> Eigent has its own agent-shared memory layer: `append_note`, `read_note`, and a `shared_files` note. Use it for transient working state within a chat or across chats (for example `- /tmp/eigent-healthtest-2026-06-18: test entry`). Use `E:\Logseq\memory.md` for durable facts you want to survive an Eigent reinstall. Health test T30 exercises the notes path.
 >
-> The Logseq manual memory (`E:\Logseq\memory.md`) is a separate convention governed by `claude.md` section 11. It is only touched when you (or the agent following the rule) explicitly write to it, so it is already opt-in per write.
+> Eigent does not have CodePilot's auto-memory layer keyed by workspace path. There is no per-conversation memory toggle to worry about, the ruleset section 11 (cave-speak) is the only memory rule that governs writes.
 
 ## Step 8 — ripgrep
 
-Fast code search the SDK prefers over shell grep.
+Fast code search the agent prefers over plain grep. Required, not optional, the ruleset §4 enforces `rg --json` structured output.
 
 - Codebase: [github.com/BurntSushi/ripgrep](https://github.com/BurntSushi/ripgrep)
 - Install: `winget install BurntSushi.ripgrep.MSVC` (or `scoop install ripgrep`, `choco install ripgrep`).
-- **Verify:** `rg --version` prints a version.
+- If `rg --version` works but `where rg` cannot find it, the winget Links directory (`C:\Users\<you>\AppData\Local\Microsoft\WinGet\Links`) is not on PATH. Add it.
+- **Verify:** `rg --version` prints a version, `where rg` resolves to a real `.exe` path.
 
 ## Step 9 — Context7 MCP (live docs)
 
@@ -106,7 +102,7 @@ Feeds the agent current library docs, kills confidently-wrong API calls.
 The agent's human-looking page reader. Three tiers: fast HTTP impersonation, Chromium, and Camoufox stealth.
 
 - Codebase: [github.com/D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling)
-- Install:
+- Install (five lines, each plugs a specific failure mode, all verified on v0.4.9):
   ```
   pip install "scrapling[fetchers]"
   scrapling install
@@ -114,7 +110,6 @@ The agent's human-looking page reader. Three tiers: fast HTTP impersonation, Chr
   pip install markdownify
   playwright install chromium
   ```
-  Five lines, each plugs a specific failure mode (all verified on v0.4.9, 2026-06-18 health test):
   - `scrapling[fetchers]` is the main package with HTTP impersonation.
   - `scrapling install` pulls Camoufox browser binaries (a few hundred MB). It does **not** install Chromium for the Playwright fetcher path.
   - `scrapling[mcp]` installs the `mcp` module the MCP entry point imports. Without it `scrapling mcp` crashes with `ModuleNotFoundError: No module named 'mcp'` even though `scrapling --version` works fine.
@@ -152,26 +147,53 @@ The agent's own anonymous search, self-hosted, never routes through an AI vendor
 Your repos: browse, issues, PRs.
 
 - Codebase: [github.com/github/github-mcp-server](https://github.com/github/github-mcp-server)
-- Command: `npx -y @modelcontextprotocol/server-github`, env `GITHUB_PERSONAL_ACCESS_TOKEN` (a fine-grained token, you add it, never commit it).
+- Transport: streamable_http. URL `https://api.githubcopilot.com/mcp/`. Header `Authorization: Bearer <your-fine-grained-PAT>`. Never commit the token.
 
-## Step 13 — Register the MCP servers in CodePilot
+## Step 12b — Supabase MCP (optional, local stdio)
 
-- Config: [files/codepilot-mcp.json](files/codepilot-mcp.json)
-1. CodePilot, MCP page in the sidebar, add each server (stdio) with the command, args, and env from the JSON.
-2. CodePilot stores MCP config in its own database, so the MCP page is the verified path. A project-level `.mcp.json` in the work dir is a best-effort fallback if your build of CodePilot honors the SDK's project config, verify before relying on it.
-- **Verify:** the MCP page shows each server with a green/running status, and the agent can list their tools.
+Your Supabase projects: query, manage, inspect.
+
+- Codebase: [github.com/supabase/mcp-server-supabase](https://github.com/supabase/mcp-server-supabase)
+- **Important:** do NOT use the remote endpoint `https://api.supabase.com/mcp/v1`. That endpoint is OAuth-only and rejects personal access tokens with a silent `Session terminated` error. Use the local stdio server.
+- Command: `npx -y @supabase/mcp-server-supabase@latest`, env `SUPABASE_ACCESS_TOKEN=<your-PAT>`.
+- **Verify:** list your projects via the MCP. A successful "no projects found" response also confirms auth works.
+
+## Step 13 — Register the MCP servers in Eigent
+
+- Config: [files/eigent-mcp.json](files/eigent-mcp.json)
+1. Eigent, Connectors / MCP page in the sidebar, **Add → Local JSON**, paste the `mcpServers` block from `files/eigent-mcp.json`. Or add each server individually (stdio) with command, args, env.
+2. Eigent writes the imported config to `~/.eigent/mcp.json`. The file is the on-disk source of truth.
+3. **Gotcha:** there is a silent MCP loading gap. Eigent's per-chat `installed_mcp` field can stay empty after import, and the agent runs without any MCP tools. The fix is a patch in `toolkit_assembler.py` (see PATCHES.md) that bridges disk config into agent runs as a fallback when `installed_mcp` is empty. Without the patch, MCP tools will not reach the agent even when `mcp.json` looks correct. The health test T00 detects this directly.
+4. Without the patch: after every import, start a fresh chat, and verify the MCP page shows each server with a green/running status AND the agent can list MCP tools in the chat. Toggling a server off and on in the Connectors panel is the manual kick if a server is stuck on "not installed."
+- **Verify:** the Connectors page shows each server green, AND in a fresh chat the agent can list its MCP tools (run health test T00).
+
+## Step 13b — Apply the Eigent backend patches
+
+This is the part that turns a stock Eigent install into the 5-agent workforce with the ruleset-aware prompt. Every patch is documented in [PATCHES.md](PATCHES.md) with file path, line numbers, and verification. Read it before applying anything, and read it again before debugging weird agent behavior.
+
+The short version of what each patch does:
+- `prompt.py`: adds the `<anir_operating_rules>` block (§0-§14) to SINGLE_AGENT_SYS_PROMPT, plus a dedicated `COORDINATOR_SYS_PROMPT` constant with pipeline_order + dispatch_contract.
+- `chat_service.py`: wires Coordinator with `role_name="Coordinator"`, renames the 4 workers to Implementer/Researcher/Subject Analyst/Verifier in `add_single_agent_worker` descriptions so Coordinator routes correctly.
+- `toolkit_assembler.py`: bridges disk MCP config into agent runs as fallback when `installed_mcp` is empty. Also schema-aware sanitizer for GLM null/empty-string emissions in MCP kwargs. Also env var expansion for `${SUPABASE_ACCESS_TOKEN}` and friends.
+- `environment_hands.py`: adds `E:\` to the agent's allowed-path list (stock only allows user dirs).
+- `listen_chat_agent.py`: filters `message_*` kwargs that GLM hallucinates into tool calls, and gracefully handles hallucinated tool names (returns "tool not in surface" error instead of crashing the whole turn).
+- `depth_limited_agent_toolkit.py`: adds 4 anti-fabrication rules to the sub-agent system message (forces tool calls for verifiable operations instead of letting the model compose plausible-looking strings).
+- `browser.py`: restores after the `_cdp_pool_manager` import break (stock bug).
+
+Apply order matters. Re-apply from the patched `.bak` files if the stock version is in place, or restore from `.bak` if you need to start over.
+
+- **Verify:** run the Layer 3 tests in [healthtest.md](healthtest.md) (T13, T13b, T13c) to confirm each patch is live.
 
 ## Step 14 — Config tweaks and the timeout fix
 
-In CodePilot settings:
-- **1M context:** on.
-- **thinking mode:** MAX, no caveats. The "30s idle reset" is not real on the Anthropic-format endpoints (direct test, 2026-06-17: a 235s silent tool-call generation on `open.bigmodel.cn/api/anthropic` and a 190s one on `api.z.ai/api/anthropic` both completed without any reset). Extended thinking streams as `thinking` deltas immediately on bigmodel, so it never sits silent in the first place. Keep it on MAX.
+In Eigent settings:
 - **Base URL:** use `https://open.bigmodel.cn/api/anthropic` (step 2). It is not a "fallback," it is the better default. bigmodel streams the first byte in ~7s on a long tool call, api.z.ai buffers the whole call and only then sends anything.
-- **The actual timeout layer (if you ever see "stream idle timeout"):** it is client-side, in CodePilot or the SDK, not at z.ai's edge. Fix it there, raise the stream-idle limit. Do not touch thinking mode and do not add a proxy.
+- **Thinking mode:** inherited from the Coding Plan endpoint, no UI toggle. The "30s idle reset" is not real on the Anthropic-format endpoints (direct test, 2026-06-17: a 235s silent tool-call generation on `open.bigmodel.cn/api/anthropic` and a 190s one on `api.z.ai/api/anthropic` both completed without any reset). Extended thinking streams as `thinking` deltas immediately on bigmodel, so it never sits silent in the first place.
+- **The actual timeout layer (if you ever see "stream idle timeout"):** it is client-side, in Eigent or CAMEL, not at z.ai's edge. Fix it there, raise the stream-idle limit in CAMEL's Anthropic client. Do not add a proxy and do not disable thinking.
 - **Do not bother with `tool_stream=true` or a local proxy.** It is a paas/v4 (OpenAI-format) flag only. On `/api/anthropic` it is silently ignored, verified by direct test (233s silent generation with the flag set, no incremental streaming).
-- **dangerously skip permissions:** on for uninterrupted binges, off to gate each action. Security note below.
+- **Permissions:** Eigent has no CodePilot-style skip-permissions toggle. The equivalent is per-tool gating via the agent's own system prompt and via hooks if you build them. If you want unattended binges, make sure your hooks (if any) allow the tools you expect to use, and keep at least one gate (the Telegram bridge allowlist in step 16, or a per-tool hook).
 
-Security note: skip-permissions removes the gate. Unattended, plus a remote bridge, plus stealth web, all at once, means anyone who reaches the bridge drives a fully ungated agent on your machine. Keep at least one gate (the bridge allowlist in step 16, or a hook in [files/claude-settings.json](files/claude-settings.json)).
+Security note: unattended, plus a remote bridge, plus stealth web, all at once, means anyone who reaches the bridge drives a fully ungated agent on your machine. Keep at least one gate.
 
 ## Step 15 — Project formatter
 
@@ -181,9 +203,11 @@ Security note: skip-permissions removes the gate. Unattended, plus a remote brid
 
 Drive the agent and approve its actions from your phone, no physical clicking.
 
+> **Status note.** Eigent's Telegram bridge is not as polished as CodePilot's. Check the current state in the Eigent repo before relying on it. If the bridge is unavailable in your version, the Sunshine + Moonlight remote-desktop layer in step 17 covers the same "approve from phone" use case with a real desktop.
+
 1. Talk to **@BotFather** in Telegram, `/newbot`, copy the token.
-2. CodePilot, enable the Telegram bridge, paste the token.
-3. **Allowlist your own chat id.** Mandatory if skip-permissions is on, it is the only thing stopping a stranger from driving your agent.
+2. Eigent, enable the Telegram bridge (if available in your version), paste the token.
+3. **Allowlist your own chat id.** Mandatory, it is the only thing stopping a stranger from driving your agent.
 - **Verify:** message the bot, it responds, and you can approve an action from the phone.
 
 ## Step 17 — Full remote desktop (Sunshine + Moonlight + Tailscale)
@@ -208,38 +232,69 @@ Low-latency, always-on, across-the-world access from your laptop or phone. No ac
 
 Goal: reboot the machine, walk away, come back to a fully working agent stack with no windows opened and no prompts accepted. Set each layer once.
 
-1. **Docker Desktop engine autostart.** Open Docker Desktop, Settings, General, tick "Start Docker Desktop when you sign in to your computer" and "Use Docker Desktop in background by default." The SearXNG container from step 11 has `--restart unless-stopped`, so it comes back with the engine.
-2. **CodePilot autostart.** Add `CodePilot.exe` to the user Run key:
+1. **Docker Desktop engine autostart.** Open Docker Desktop, Settings, General, tick "Start Docker Desktop when you sign in to your computer" and "Use Docker Desktop in background by default." The SearXNG container from step 11 has `--restart unless-stopped`, so it comes back with the engine. The optional Eigent Docker backend (3001) follows the same rule if you enable it.
+2. **Eigent autostart.** Add `Eigent.exe` to the user Run key:
    ```
-   reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v CodePilot /t REG_SZ /d "\"C:\path\to\CodePilot.exe\"" /f
+   reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v Eigent /t REG_SZ /d "\"E:\Eigent\Eigent.exe\"" /f
    ```
-   In CodePilot's own settings, toggle any "start minimized to tray" or "minimize on close" option so it does not pop a window at login. Closing the main window should send it to the tray, not exit the process. MCP servers spawn on-demand from CodePilot, so once CodePilot is up, the entire MCP layer is up.
+   Eigent's embedded backend on port 5001 takes 5-30s to come up after the desktop appears. The Docker backend on 3001 is the fallback. Either backend serving agent traffic is a PASS. The health test T24 and the user-only reboot test U01 both account for this race.
 3. **Sunshine service.** Step 17 already set the Sunshine service to Automatic. Verify in `services.msc`, `SunshineService`, Startup type: Automatic.
 4. **Tailscale service.** The installer sets `Tailscale` to Automatic by default. Verify in `services.msc`.
 5. **Host power.** Step 17 set Sleep to Never. Also set "Turn off the display" to Never if you want Sunshine to stream the actual desktop rather than wake from sleep.
-6. **Hide tray icons (optional).** Windows, Settings, Personalization, Taskbar, "Other system tray icons," flip Docker / CodePilot / Tailscale / Sunshine to Off. They still run, they just stop cluttering the tray.
-- **Verify:** reboot, do not log in for a minute, log in from your phone via Moonlight over Tailscale (or just walk to the machine). The desktop should be up, CodePilot in the tray, Docker engine running, SearXNG responding on `127.0.0.1:8888`. No clicks given.
+6. **Hide tray icons (optional).** Windows, Settings, Personalization, Taskbar, "Other system tray icons," flip Docker / Eigent / Tailscale / Sunshine to Off. They still run, they just stop cluttering the tray.
+- **Verify:** reboot, do not log in for a minute, log in from your phone via Moonlight over Tailscale (or just walk to the machine). The desktop should be up, Eigent in the tray, Docker engine running, SearXNG responding on `127.0.0.1:8888`, and at least one backend responding (5001 or 3001). No clicks given.
+
+## Step 18b — Headless CDP Chrome autostart
+
+Eigent's renderer auto-launches a **visible** Chrome (no `--headless` flag in `electron/main/index.ts:865`) whenever the CDP browser pool is empty. Pre-launch a dedicated **headless** Chrome at login to keep the pool non-empty and suppress the visible-Chrome spawn.
+
+1. Create a dedicated profile dir so this Chrome does not share state with your daily browser:
+   ```
+   C:\Users\<you>\.eigent\browser_profiles\headless_startup
+   ```
+2. Drop a `.bat` in `shell:startup` (Win+R, `shell:startup`, Enter). Call it `eigent-headless-chrome.bat`. Contents:
+   ```bat
+   @echo off
+   rem Eigent headless CDP Chrome — keep pool non-empty so chatStore auto-launch never fires.
+   if /i "%EigHeadlessChrome%"=="0" exit 0
+   powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://127.0.0.1:9224/json/version' -UseBasicParsing -TimeoutSec 1).StatusCode | Out-Null; exit 0 } catch { exit 1 }" >nul 2>&1
+   if %ERRORLEVEL%==0 exit 0
+   start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
+     --headless=new ^
+     --remote-debugging-port=9224 ^
+     --user-data-dir="C:\Users\<you>\.eigent\browser_profiles\headless_startup" ^
+     --no-first-run ^
+     --no-default-browser-check ^
+     --disable-blink-features=AutomationControlled ^
+     about:blank
+   exit 0
+   ```
+3. In Eigent UI, open the Browser / CDP page, **Add external CDP browser** with URL `http://127.0.0.1:9224`. This entry persists across reboots in Eigent's settings (`cdp_browser_pool`), no need to re-add.
+4. Log out, log back in. The `.bat` runs at login, Chrome comes up headless on 9224, Eigent starts from its own Run key, sees the pool is non-empty, never triggers the visible-Chrome spawn.
+- **Verify:** after a reboot, send any chat in Eigent that triggers a browser tool. No visible Chrome window appears. `curl http://127.0.0.1:9224/json/version` returns JSON.
+- **To disable:** delete the `.bat`, or set user env var `EigHeadlessChrome=0`.
+- **Permanent fix (not in this guide):** patch `electron/main/index.ts:867` to add `'--headless=new'` to the spawn args and rebuild Eigent from source. That removes the need for this entire step.
 
 ## Step 19 — Optional hooks
 
-- Config: [files/claude-settings.json](files/claude-settings.json) at `E:\Logseq\.claude\settings.json`.
-- Hooks run regardless of skip-permissions, so a `PreToolUse` hook gating `git push` is your real guard. Verify CodePilot honors project `.claude` config before relying on it.
+Eigent does not honor `.claude/settings.json` hooks natively. If you want pre-tool or post-tool hooks, you have to build them in Eigent's own backend (or wait for a future Eigent release that exposes a hook config). The file [files/claude-settings.json](files/claude-settings.json) is kept as reference for what a typical hook setup looks like in the CodePilot world, treat it as a blueprint only.
 
 ## Step 20 — Final checklist
 
 - [ ] z.ai Coding Lite plan, API key in hand (0)
-- [ ] CodePilot installed (1), z.ai provider added with `API_TIMEOUT_MS`, model glm-5.2 (2)
-- [ ] Logseq graph, workspace path set (3)
+- [ ] Eigent installed (1), z.ai Anthropic card added with bigmodel.cn base URL, model glm-5.2, Prefer on (2)
+- [ ] Logseq graph, workspace bound via Create space → Use local folder → `E:\Logseq` (3)
 - [ ] `claude.md` (4), `user.md` filled (5), `soul.md` (6), `memory.md` + `memory/` (7)
-- [ ] ripgrep on PATH (8)
-- [ ] Context7 (9), Scrapling installed with `scrapling[mcp]` (10), SearXNG container up + JSON verified on a non-8080 port (11), GitHub MCP optional (12)
-- [ ] all MCP servers registered and green in CodePilot (13)
-- [ ] 1M context on, thinking MAX, base URL on `open.bigmodel.cn/api/anthropic` (14)
+- [ ] ripgrep on PATH, `where rg` resolves (8)
+- [ ] Context7 (9), Scrapling installed with `scrapling[mcp]` + `markdownify` + `playwright install chromium` (10), SearXNG container up + JSON verified on a non-8080 port (11), GitHub MCP optional (12), Supabase MCP via local stdio (12b)
+- [ ] all MCP servers registered and green in Eigent Connectors, agent lists MCP tools in a fresh chat (13, T00)
+- [ ] Eigent backend patches applied: prompt.py, chat_service.py, toolkit_assembler.py, environment_hands.py, listen_chat_agent.py, depth_limited_agent_toolkit.py, browser.py (13b, T13/T13b/T13c)
+- [ ] base URL on `open.bigmodel.cn/api/anthropic` (14)
 - [ ] project formatter present (15)
-- [ ] Telegram bridge enabled and allowlisted (16)
+- [ ] Telegram bridge enabled and allowlisted, if available in your Eigent version (16)
 - [ ] Tailscale on host + clients, Sunshine service Automatic on host, Sleep Never, Moonlight paired over the Tailscale IP (17)
-- [ ] reboot persistence configured: Docker autostart + tray, CodePilot autostart + tray, services Automatic, Sleep Never (18)
+- [ ] reboot persistence configured: Docker autostart + tray, Eigent autostart, services Automatic, Sleep Never, headless CDP Chrome .bat in shell:startup (18, 18b)
 - [ ] skip-permissions decision made with at least one gate kept (14, 16, 19)
-- [ ] **run [healthtest.md](healthtest.md) in a fresh CodePilot session, every AI-run test passes, then do the user-only reboot test (U01)**
+- [ ] **run [healthtest.md](healthtest.md) in a fresh Eigent session, every AI-run test passes, then do the user-only reboot test (U01)**
 
-Done. A lean, autonomous, remotely-drivable agent for the price of a coding plan.
+Done. A lean, autonomous, remotely-drivable 5-agent workforce for the price of a coding plan.
