@@ -70,14 +70,6 @@ One-sentence evidence: <why this passes or fails>
 **Note on UI count:** Eigent UI shows "4 agents running" during workforce dispatch. This is correct, not a bug. It counts dispatched workers (`workforce._children`). Coordinator is the orchestrator, passed separately to the `Workforce(...)` constructor, and is not counted as a child. 4 workers + 1 Coordinator = 5 total.
 
 ---
-- The Researcher (or whichever worker Coordinator routes to) returns the real page title (likely "Example Domain").
-- Bonus: the Coordinator's dispatch log shows it picked the Researcher based on the worker description rewrite in PATCHES.md.
-
-**Fail hint:** if dispatch fails or only the Single Agent responds, multi-agent routing isn't configured. Check Settings → Agents to verify all 5 roles are enabled, and re-verify `healthtest.md` T13b (chat_service.py patches).
-
-**Note on UI count:** Eigent UI shows "4 agents running" during workforce dispatch. This is correct, not a bug. It counts dispatched workers (`workforce._children`). Coordinator is the orchestrator, passed separately to the `Workforce(...)` constructor, and is not counted as a child. 4 workers + 1 Coordinator = 5 total.
-
----
 
 ## W2 — Workforce architecture audit (giga) `[AI]`
 
@@ -135,16 +127,6 @@ Top failure (if any): <criterion N — one-sentence root cause>
 ```
 
 If the workforce cannot produce the doc (e.g., backend hung, dispatch failed), the Coordinator still emits the chat block with all criteria marked FAIL or NA and a one-sentence reason. Silence is not acceptable.
-
-# Subject of the doc
-
-Build a 600-900 word technical doc titled "How Eigent's 5-Agent Workforce Routes a Task: From Coordinator Dispatch to Verifier Sign-Off" that cites real files from E:/Eigent/resources/backend/app/. The doc must include five sections:
-
-1. Architecture overview — name all 5 roles (Coordinator, Implementer, Researcher, Subject Analyst, Verifier) and cite the file:line where each is constructed.
-2. Pipeline stages — explain how Coordinator declares dependencies between stages, quote the pipeline_order or dispatch_contract from COORDINATOR_SYS_PROMPT.
-3. Tool surfaces — list the MCP tools each worker has access to (context7, scrapling, searxng, github, supabase, plus file tools).
-4. Anti-fabrication rules — cite the rule text from SINGLE_AGENT_SYS_PROMPT or the depth-limited toolkit that prevents fabricated tool output.
-5. Real example trace — walk through probes P1-P5 below, showing which agent did what.
 
 # Subject of the doc
 
@@ -283,11 +265,191 @@ The Coordinator's wrap-up must include:
 
 ---
 
+## W3 — Production workload simulator `[AI]`
+
+**Proves:** the workforce can one-shot a real production-style research task from scratch. This is the test that validates workforce mode for actual use, not just architectural correctness. W1 and W2 prove the wiring works; W3 proves the workforce can do useful work with that wiring.
+
+**Scope:** the workforce researches a niche technical subject, evaluates candidates against requirements, and writes a verbose 1500-2500 word deliverable doc with real verifiable claims (URLs, versions, licenses, stars). This mirrors how a user would one-shot a research project by asking the workforce "find the best open-source X for Y and write up the recommendation."
+
+**Naming scheme for artifacts (mandatory):**
+- Workspace dir: `E:/Logseq/audits/wf-proj-YYYY-MM-DD-NN/` (note: `wf-proj-`, not `wf-audit-`).
+- Final deliverable: `deliverable.md` inside that dir.
+- Run record: `E:/Logseq/audits/audit-YYYY-MM-DD-NN.md` (same scheme as W2).
+- Use the next NN from `ls E:/Logseq/audits/`.
+
+**Prompt (paste into Eigent multi-agent dispatch — replace `YYYY-MM-DD` with today's date, `NN` with next sequence number, and `[SUBJECT]` with one of the subjects listed below or your own):**
+
+```
+You are running a Production Workload Simulation. Final deliverable: a verbose 1500-2500 word technical doc at E:/Logseq/audits/wf-proj-YYYY-MM-DD-NN/deliverable.md. This simulates a user one-shotting a large research project from scratch. Every claim must trace to a real tool call (Scrapling fetch, SearXNG search, GitHub MCP, Context7). Fabricated URLs, versions, or licenses are a hard fail.
+
+# MANDATORY front-facing chat output
+
+After the workforce finishes and the Verifier signs off, the Coordinator MUST emit a single chat message with this exact shape. Users do not open .md files. The chat IS the deliverable for them.
+
+```
+WF-PROJ YYYY-MM-DD-NN
+Subject: <one-line>
+Verdict: PASS | FAIL
+Top recommendation: <name + one-line reason>
+Doc: E:/Logseq/audits/wf-proj-YYYY-MM-DD-NN/deliverable.md
+Verifier stats: <URLs checked> URLs / <PASS> pass / <FAIL> fail | <claims checked> claims / <verified> verified
+Confidence: HIGH | MEDIUM | LOW — <one-sentence reason>
+Next steps for Anir: <2-3 concrete actions or open questions>
+```
+
+If the workforce cannot produce the doc, the Coordinator still emits this block with Verdict: FAIL and a one-sentence reason. Silence is not acceptable.
+
+# Subject
+
+[SUBJECT]
+
+Example subjects (pick one or substitute your own of similar scope):
+- Find the best open-source finite-state-machine library for Python with async transition support, under active maintenance (commits in last 90 days), and write a getting-started example.
+- Identify the top 3 self-hostable web analytics tools with no cookies, no GDPR consent requirement, and sub-1MB client script size. Include a deployment sketch for the top pick.
+- Research SOTA for running LLMs locally on Windows with an AMD GPU (not NVIDIA). Cover Vulkan vs ROCm vs DirectML paths, and recommend the best stack as of today.
+- Find a minimalist open-source CRDT library that supports rich-text collaboration and has Python bindings. Compare against Yjs and Automerge for ease of integration.
+- Identify the best open-source headless CMS with a SQLite backend and a REST/GraphQL API. Must not require Node at runtime.
+
+# Pipeline
+
+## Stage 1 (PARALLEL — Researcher and Subject Analyst MUST NOT see each other)
+
+Researcher: real tool calls only (Scrapling fetch, SearXNG search, GitHub MCP, Context7). Identify 4-6 candidate projects that fit the subject. For each, collect: name, repo URL, star count, latest version, release date, license, primary language, last-commit date, and a one-sentence description. GitHub MCP for star count and license (NOT hallucinated); Scrapling for README content; Context7 for docs.
+
+Subject Analyst (parallel to Researcher, MUST NOT see Researcher's output): decompose the subject into 6-10 evaluation criteria without looking at external sources. Rank criteria by importance. Example criteria: activity (last commit < 90 days), license permissiveness, docs quality, API ergonomics, test coverage, binary size, dependency count, community size, platform compatibility, performance. End section with one marker:
+  "PARALLEL_DISPATCH_CONFIRMED: I did not have access to the Researcher's output."
+  "SEQUENTIAL_DISPATCH_LEAKED: I was given the Researcher's output as a dependency."
+
+## Stage 2 (depends on Stage 1 — Implementer)
+
+Write deliverable.md. 1500-2500 words. Sections in this order:
+  1. Executive Summary (150-200 words) — top pick + 2-sentence rationale.
+  2. Requirements Decomposition — Subject Analyst's criteria, presented as a ranked list.
+  3. Per-Candidate Deep Dive — one subsection per candidate, 150-250 words each. For each: what it is, what it does well, where it falls short, real star count, real license, real last-commit date.
+  4. Comparison Matrix — markdown table with all candidates × all criteria. Cells must be concrete (e.g., "12,345 stars" not "popular"; "MIT" not "permissive"; "2026-05-14" not "recent").
+  5. Recommendation + Rationale — top pick, second pick, why, what would change the recommendation.
+  6. Risks and Trade-offs — maintenance risk, license risk, vendor lock-in, migration cost if the pick fails.
+  7. Getting-Started Code Sample — copy-pasteable snippet for the top pick (10-30 lines).
+
+## Stage 3 (depends on Stage 2 — Verifier, runs LAST)
+
+Open E:/Logseq/audits/wf-proj-YYYY-MM-DD-NN/deliverable.md and verify:
+  - Word count is 1500-2500.
+  - Every GitHub URL: fetch via Scrapling or GitHub MCP, confirm star count, license, last-commit date all match what the doc claims (±5% on stars, exact on license and date).
+  - Every external URL: reachable per the <url_verification> rule (HTTP 308 → 2xx = PASS; HTTP 4xx/5xx = FAIL).
+  - Comparison matrix has no empty cells.
+  - Getting-Started code sample is syntactically valid for the stated language.
+Build a verification table in a new file `E:/Logseq/audits/wf-proj-YYYY-MM-DD-NN/verifier-report.md`:
+  | Claim in deliverable | Verification method | Expected | Actual | Verdict |
+
+## Stage 4 (Coordinator wrap)
+
+Emit the front-facing chat block (see above). Include: dispatch order (Stage 1 parallel → Stage 2 → Stage 3 → Stage 4), task IDs assigned to each worker, confirmation "Coordinator made 0 tool calls during this workload."
+
+# Output structure
+
+deliverable.md follows the 7-section structure above. No sections skipped. No "TODO" placeholders. No "the workforce could not..." cop-outs — if a candidate doesn't have a piece of data, say "not available" and explain the gap, do not fabricate.
+```
+
+**Pass criteria (all 8 must hold):**
+
+1. Doc exists at the reported path, size 8-40KB, word count 1500-2500.
+2. All 7 sections present in order, none empty.
+3. At least 4 candidates evaluated in Section 3 with real verifiable GitHub URLs.
+4. Section 4 comparison matrix has zero empty cells and zero "TBD" / "unknown" values (unknowns go in Section 6 Risks).
+5. Every star count, license, and last-commit date in the doc matches what GitHub MCP or a Scrapling fetch of the repo returns (±5% on stars; exact on license and date).
+6. Every URL in the doc is reachable per the 308-to-2xx rule. A 308 that resolves to 200 MUST be marked PASS.
+7. Subject Analyst's section ends with PARALLEL_DISPATCH_CONFIRMED (not SEQUENTIAL_DISPATCH_LEAKED).
+8. Coordinator's front-facing chat block is emitted with Verdict matching the Verifier's report.
+
+**Fail hints per criterion:**
+
+- (1) fails: Implementer didn't write, or wrote too short/long. Check word count in the doc; if short, Implementer may be summarizing instead of decomposing (prompt compliance issue, not architecture issue).
+- (2) fails: a section was skipped. Implementer prompt compliance issue.
+- (3) fails: Researcher didn't do real tool calls, or only surfaced 1-2 candidates. Check `healthtest.md` T17 (MCP loading) and T23 (Scrapling).
+- (4) fails with empty cells: Implementer took shortcuts. Prompt compliance.
+- (5) fails: Researcher fabricated data (the big risk). Same anti-fabrication ceiling as W2 criterion 4. Cross-check against GitHub MCP — if MCP returns a different number, the doc is wrong.
+- (6) fails: Verifier's URL rule didn't load, or Verifier didn't run. Check that MULTI_MODAL_SYS_PROMPT still contains the `<url_verification>` block (PATCHES.md P11).
+- (7) fails with SEQUENTIAL_DISPATCH_LEAKED: same parallel-dispatch bug as W2 criterion 6. CAMEL workforce.py dependency injection is leaking.
+- (8) fails: Coordinator didn't emit chat output, or emitted a Verdict that contradicts Verifier. Re-run W2 to isolate.
+
+**Notes:**
+- W3 is the test to re-run when you change anything about how the workforce does real work: prompt.py edits, MCP config changes, asyncio.to_thread patches. W2 catches architectural regressions; W3 catches "the workforce can still produce useful output."
+- If W3 fails on (5) fabrication, that is a model-behavior issue (GLM-5.2 ceiling), not an architecture bug. The fix is parent-side verification (Verifier catches the fabrication), which W3's Stage 3 does test.
+
+---
+
+## W4 — URL rule isolation test (Verifier-only) `[AI]`
+
+**Proves:** the `<url_verification>` block in MULTI_MODAL_SYS_PROMPT (PATCHES.md P11) is loaded and honored. This is the cheap regression test for the 308-to-200 false-fail rule — no full workforce dispatch, no Implementer, no doc. Just the Verifier answering 3 URLs.
+
+**Why this exists:** W2 and W3 both require a full workforce dispatch, which at GLM-5.2 token costs is expensive to re-run every time you tweak prompt.py. W4 isolates the one rule most likely to silently break (because it was added late and lives in a specific block of MULTI_MODAL_SYS_PROMPT).
+
+**Naming scheme for artifacts:**
+- No file artifacts required. The chat output IS the deliverable.
+- Optional: if you want a record, save the Verifier's raw output to `E:/Logseq/audits/wf-url-YYYY-MM-DD-NN.md` (use `wf-url-` prefix to distinguish from `wf-audit-` and `wf-proj-`).
+
+**Prompt (paste into Eigent — this routes to Verifier only, no full workforce dispatch needed):**
+
+```
+Verifier-only micro-test. Do NOT invoke Researcher, Subject Analyst, or Implementer. You are the Verifier; answer directly.
+
+Verify these 3 URLs and emit the standard Verifier output schema (VERDICT / EVIDENCE / FIX / ESCALATION) for each:
+
+1. https://openhands.dev  (known 308 redirect to www.all-hands.dev)
+2. https://docs.openhands.dev  (known 308 redirect)
+3. https://github.com/OpenHands/OpenHands  (straight 200, no redirect)
+
+Fetch each with redirects enabled. Report the final HTTP code and final URL after redirects, then verdict.
+
+Per the <url_verification> block in your sys_prompt (MULTI_MODAL_SYS_PROMPT at app/agent/prompt.py), the rule is strict:
+  - HTTP 200, 201, 204 = PASS.
+  - HTTP 301, 302, 307, 308 that resolves to a 2xx final response = PASS. Do NOT mark these FAIL.
+  - HTTP 4xx, 5xx = FAIL.
+  - Connection error, timeout, DNS failure = FAIL.
+
+A 308-to-200 marked as FAIL is a regression. The rule is not loaded or not honored.
+
+# MANDATORY front-facing chat output
+
+```
+W4 URL RULE TEST — YYYY-MM-DD-NN
+URL | final HTTP | verdict
+1. https://openhands.dev            | <code> | PASS | FAIL
+2. https://docs.openhands.dev       | <code> | PASS | FAIL
+3. https://github.com/OpenHands/... | <code> | PASS | FAIL
+Rule loaded: YES | NO
+Regression: YES | NO
+```
+
+All 3 rows should be PASS. If row 1 or 2 is FAIL, the URL rule is broken.
+```
+
+**Pass criteria (all 3 must hold):**
+
+1. Row 1 (openhands.dev) returns PASS with a 2xx final HTTP code (typically 200 after 308 → www.all-hands.dev).
+2. Row 2 (docs.openhands.dev) returns PASS with a 2xx final HTTP code.
+3. Row 3 (github.com/OpenHands/OpenHands) returns PASS with HTTP 200.
+
+**Fail hints:**
+
+- (1) or (2) fails with FAIL: the Verifier is marking 308 redirects as fails. Either the `<url_verification>` block in MULTI_MODAL_SYS_PROMPT was removed/reverted, or the model is ignoring it. Check `E:/Eigent/resources/backend/app/agent/prompt.py` for the `<url_verification>` block (around line 273-283). If missing, re-apply PATCHES.md P11.
+- (3) fails: unrelated to P11. The GitHub URL is genuinely down, or Scrapling is broken. Check `healthtest.md` T23.
+- Verifier invokes other workers: the routing is wrong, or the prompt wasn't pasted as a Verifier-only message. Re-paste the prompt.
+
+**Notes:**
+- W4 should take under 30 seconds and cost under 5K tokens. Run it every time you edit prompt.py.
+- If you change the URL rule text in MULTI_MODAL_SYS_PROMPT, update this test's "known 308 redirect" URLs to match — or keep them stable as a regression baseline.
+
+---
+
 ## Final checklist
 
 - [ ] W1 smoke test passes (workforce can be triggered at all).
-- [ ] W2 giga audit passes all 10 criteria.
-- [ ] If you intend to use workforce mode in production, re-run W2 after every Eigent update or prompt.py edit.
-- [ ] Audit artifacts stored at `E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/` (date + sequence). Do not reuse sequence numbers on the same day.
+- [ ] W2 architecture audit passes all 10 criteria.
+- [ ] W3 production workload simulator passes all 8 criteria with a real subject. This is the test that validates workforce mode for actual use, not just architectural correctness.
+- [ ] W4 URL rule isolation test passes all 3 rows. Run this after every prompt.py edit.
+- [ ] After any Eigent update, prompt.py edit, or chat_service.py patch: re-run W4 (cheap, ~5K tokens), then W2 (medium, ~200-500K tokens), then W3 (expensive, ~500K-2M tokens) only if W2 caught nothing but you need to confirm real-work output still works.
+- [ ] Audit artifacts stored at the correct path scheme: `E:/Logseq/audits/wf-audit-YYYY-MM-DD-NN/` (W2), `E:/Logseq/audits/wf-proj-YYYY-MM-DD-NN/` (W3), optional `E:/Logseq/audits/wf-url-YYYY-MM-DD-NN.md` (W4).
 - [ ] Run record at `E:/Logseq/audits/audit-YYYY-MM-DD-NN.md` covers what was run, what passed/failed, and any anomalies.
-- [ ] Front-facing chat output emitted with the 10-row PASS/FAIL table. Users saw the verdict without opening the doc.
+- [ ] Front-facing chat output emitted for every workforce run. Users saw the verdict without opening the doc.
