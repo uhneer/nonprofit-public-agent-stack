@@ -2,7 +2,13 @@
 
 A complete, opinionated build for a long-running, low-cost, autonomous coding and research agent. A cheap frontier model (GLM 5.2 via z.ai) plus a desktop harness (Eigent, on CAMEL-AI), a Logseq workspace, a lean MCP tool set, a firm instruction ruleset, a custom 5-agent workforce, and remote access. The target is Fable-5-class behavior without the bloat or the price.
 
-**Person-agnostic by design.** Repo ships nameless. Ruleset refers to "the operator" throughout; `user.md` ships with blank fields including Name. The agent reads `user.md` at session start for personalization. An agent reading this repo can self-install the entire stack by following [GUIDE.md](GUIDE.md) step by step, copying the drop-in files at `files/eigent-backend/` into the backend, and prompting the operator for the handful of one-time manual steps (buying the z.ai plan, generating tokens, UI clicks).
+**Name slots are blank by design.** Every place in this repo that would normally carry an operator name (the ruleset, the user profile, the prompts) ships with `_____` placeholders or the generic phrase "the operator". Nothing in here will make the AI call you by someone else's name. Two ways to fill them in:
+- **Human path:** open `files/user.md` in a text editor before you copy it to your workspace, replace `_____` and the blank fields with your own details, save.
+- **Agent path:** when you first talk to the agent after install, just tell it your name (and any other durable facts). The agent's job per the ruleset is to write what you said into `user.md` on disk. You do not need to edit the ruleset itself.
+
+**Path convention.** Examples in this repo assume the workspace lives at `E:\Logseq` and the harness at `E:\Eigent` (the defaults from [GUIDE.md](GUIDE.md)). If you install elsewhere, substitute your paths wherever you see those literals; nothing in the code or rulesets is hardcoded to `E:\`.
+
+**Person-agnostic by design.** An agent reading this repo can self-install the entire stack by following [GUIDE.md](GUIDE.md) step by step, copying the drop-in files at `files/eigent-backend/` into the backend, and prompting the operator for the handful of one-time manual steps (buying the z.ai plan, generating tokens, UI clicks).
 
 Three documents:
 - **This README** is the architecture map: what every layer is and why (sections 1 to 9).
@@ -53,7 +59,7 @@ Eigent also has an agent-shared notes layer (`append_note` / `read_note` / `shar
 ## 7. Tooling inventory (this setup utilizes)
 
 **Search and code navigation.**
-- **ripgrep** ([BurntSushi/ripgrep](https://github.com/BurntSushi/ripgrep)) — fast structured code search. Install via `winget install BurntSushi.ripgrep.MSVC`. Required: the agent defaults to `rg` over plain grep for any codebase search. `fd` and `jq` are deliberately NOT installed; the agent uses `find` and Python `json` instead. The choice is enforced by the operating rules baked into `prompt.py` (`anir_operating_rules` §3). Do not install them without updating that ruleset.
+- **ripgrep** ([BurntSushi/ripgrep](https://github.com/BurntSushi/ripgrep)) — fast structured code search. Install via `winget install BurntSushi.ripgrep.MSVC`. Required: the agent defaults to `rg` over plain grep for any codebase search. `fd` and `jq` are deliberately NOT installed; the agent uses `find` and Python `json` instead. The choice is enforced by the operating rules baked into `prompt.py` (`operator_operating_rules` §3). Do not install them without updating that ruleset.
 
 **Formatting.**
 - A **project formatter** on whatever you are actively shipping: Prettier (JS/TS), Black (Python), `gofmt` (Go), Spotless (Java/Gradle), `rustfmt` (Rust). Lets the agent self-format instead of hand-fixing style.
@@ -77,7 +83,7 @@ Eigent ships with a generic 4-agent workforce. This stack replaces it with a 5-r
 - **Subject Analyst**: domain reasoning, problem decomposition, "what does the task actually ask."
 - **Verifier**: runs tests, checks claims, catches fabricated output (T31 leverages this role once parent-side verification is wired).
 
-Patches live in `prompt.py` (COORDINATOR_SYS_PROMPT + anir_operating_rules §0-§14) and `chat_service.py` (role_name="Coordinator" + worker descriptions). Full details in PATCHES.md. Fan-out sub-agents currently run on the same model the parent uses (GLM-5.2), not a smaller role model.
+Patches live in `prompt.py` (COORDINATOR_SYS_PROMPT + operator_operating_rules §0-§14) and `chat_service.py` (role_name="Coordinator" + worker descriptions). Full details in PATCHES.md. Fan-out sub-agents currently run on the same model the parent uses (GLM-5.2), not a smaller role model.
 
 ## 9. Stock vs custom (so you know what is yours)
 - **Stock:** the Eigent app and CAMEL-AI runtime, the user/memory templates, the z.ai provider entry, the factory 4-agent workforce (replaced, not deleted).

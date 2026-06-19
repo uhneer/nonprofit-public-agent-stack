@@ -150,9 +150,9 @@ Plus four user-only tests (U01 to U04) the agent cannot run.
 For tests in this layer, the agent should use `shell_exec` (or equivalent terminal tool) to read the file and report what it sees. Eigent does not have a dedicated Read tool the way Claude Code does; `shell_exec` with `cat`/`head` is the path.
 
 ### T13 — patched prompt.py is live (5-agent stack) `[LOCATE]`
-**Proves:** the `<anir_operating_rules>` block is in Eigent's prompt.py with §0-§14 (no §15, that was moved to COORDINATOR). Plus a dedicated `COORDINATOR_SYS_PROMPT` constant exists with pipeline order + dispatch contract + synthesis rules.
-**Prompt:** `Open E:/Eigent/resources/backend/app/agent/prompt.py. Report: (a) line where SINGLE_AGENT_SYS_PROMPT is defined, (b) line where the <anir_operating_rules> block opens inside it, (c) highest section number inside that block (should be §14, NOT §15), (d) line where COORDINATOR_SYS_PROMPT is defined as a separate constant, (e) does COORDINATOR_SYS_PROMPT contain a <pipeline_order> tag? (f) does it contain a <dispatch_contract> tag?`
-**Pass:** (a) SINGLE_AGENT_SYS_PROMPT around line 566, (b) `<anir_operating_rules>` opens ~line 608, (c) highest section is §14 (§15 was extracted to COORDINATOR), (d) `COORDINATOR_SYS_PROMPT` defined around line 714, (e) yes `<pipeline_order>` present, (f) yes `<dispatch_contract>` present.
+**Proves:** the `<operator_operating_rules>` block is in Eigent's prompt.py with §0-§14 (no §15, that was moved to COORDINATOR). Plus a dedicated `COORDINATOR_SYS_PROMPT` constant exists with pipeline order + dispatch contract + synthesis rules.
+**Prompt:** `Open E:/Eigent/resources/backend/app/agent/prompt.py. Report: (a) line where SINGLE_AGENT_SYS_PROMPT is defined, (b) line where the <operator_operating_rules> block opens inside it, (c) highest section number inside that block (should be §14, NOT §15), (d) line where COORDINATOR_SYS_PROMPT is defined as a separate constant, (e) does COORDINATOR_SYS_PROMPT contain a <pipeline_order> tag? (f) does it contain a <dispatch_contract> tag?`
+**Pass:** (a) SINGLE_AGENT_SYS_PROMPT around line 566, (b) `<operator_operating_rules>` opens ~line 608, (c) highest section is §14 (§15 was extracted to COORDINATOR), (d) `COORDINATOR_SYS_PROMPT` defined around line 714, (e) yes `<pipeline_order>` present, (f) yes `<dispatch_contract>` present.
 **Fail hint:** if §15 is still inside SINGLE_AGENT, the extraction didn't apply. If COORDINATOR_SYS_PROMPT is missing entirely, the patch is stale or wasn't applied. Re-apply from prompt.py.bak-equivalent state. See PATCHES.md.
 
 ### T13b — chat_service.py wires Coordinator correctly `[LOCATE]`
@@ -210,13 +210,13 @@ For tests in this layer, the agent should use `shell_exec` (or equivalent termin
 ## Layer 4 — Services and CLI
 
 ### T19 — ripgrep installed and preferred `[AI]`
-**Proves:** `rg.exe` (ripgrep 15.1.0+) is on PATH and the agent prefers it over plain `grep` per the operating rules baked into `prompt.py` (anir_operating_rules §4: "ripgrep 15.1.0 已装, 优先 `rg --json` 结构化输出"). Not the user-facing `claude.md` ruleset, which is name-agnostic about tools.
+**Proves:** `rg.exe` (ripgrep 15.1.0+) is on PATH and the agent prefers it over plain `grep` per the operating rules baked into `prompt.py` (operator_operating_rules §4: "ripgrep 15.1.0 已装, 优先 `rg --json` 结构化输出"). Not the user-facing `claude.md` ruleset, which is name-agnostic about tools.
 **Prompt:** `Run "rg --version" and report the version. Then run "rg --json TODO E:/Eigent/resources/backend/app/agent/prompt.py" (or any small file) and report whether you get structured JSON output. Also run "where rg" to confirm the binary is on PATH.`
 **Pass:** (a) `rg --version` reports version 15.1.0 or higher, AND (b) `rg --json` produces structured JSON output (parseable, contains `"type":"match"` entries or empty array if no matches), AND (c) `where rg` resolves to a real .exe path.
 **Fail hint:** if `rg` is missing, install via `winget install BurntSushi.ripgrep.MSVC`. If installed but `where rg` can't find it, the winget Links directory (`C:/Users/the operatora/AppData/Local/Microsoft/WinGet/Links`) is not on PATH, add it.
 
 ### T19b — fd and jq must NOT be expected `[AI]`
-**Proves:** the agent knows its real tool surface. Per the operating rules baked into `prompt.py` (anir_operating_rules §4): "`fd` 未装, 目录遍历用 `find`. `jq` 未装, JSON 处理用 Python `json` 模块 via shell_exec." The agent should NOT silently fall back to pretending these exist.
+**Proves:** the agent knows its real tool surface. Per the operating rules baked into `prompt.py` (operator_operating_rules §4): "`fd` 未装, 目录遍历用 `find`. `jq` 未装, JSON 处理用 Python `json` 模块 via shell_exec." The agent should NOT silently fall back to pretending these exist.
 **Prompt:** `Run "where fd" and "where jq". Report exactly what you see. If both return "INFO: Could not find files..." or equivalent "not found", that is correct and expected. Then describe what you would use instead for (a) finding files by name pattern, (b) parsing JSON from a shell pipe.`
 **Pass:** (a) `where fd` reports not found, AND (b) `where jq` reports not found, AND (c) the agent's alternatives are `find` (for file lookup) and Python `json` module via shell_exec (for JSON parsing). Bonus: agent explicitly cites §4 of the ruleset.
 **Fail hint:** if `fd` or `jq` IS installed, the §4 rule is stale. Update prompt.py to reflect what's actually on PATH. If the agent tries to use `fd`/`jq` and fails, it ignored the §4 rule.

@@ -2,6 +2,8 @@
 
 This file is the deep audit for Eigent's **workforce mode** (Coordinator + Implementer + Researcher + Subject Analyst + Verifier). The single-agent stack has its own file at [`healthtest.md`](healthtest.md); run that first, then run this file when you want to validate multi-agent dispatch.
 
+**Path convention.** Tests below reference `E:/Logseq/audits/` (workspace audit dir), `E:/Logseq/.mcp.json` (workspace MCP config), and `E:/Eigent/resources/backend/app/` (Eigent backend). These are the defaults from GUIDE.md. If you installed on a different drive or folder, substitute your workspace dir for `E:/Logseq` and your Eigent install dir for `E:/Eigent` throughout.
+
 **What this proves that `healthtest.md` does not:**
 - All 5 roles actually fire (not silently degraded).
 - Each worker exhibits behavior UNIQUE to its sys_prompt role, not generic helpful-assistant output.

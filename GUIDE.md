@@ -9,6 +9,9 @@ Every step on earth, in order, so anyone can fully replicate the environment by 
 - `Start menu` = press the Windows key, type the search box, click the result.
 - `Settings` inside an app = the app's own settings, not Windows Settings unless explicitly said "Windows Settings".
 - "Verify" = the build is not done until this works. Re-read the step if your output does not match.
+- Paths like `E:\Logseq` and `E:\Eigent` are the defaults used throughout this guide. If you install on a different drive or folder, substitute your paths wherever you see those literals; nothing in the code or rulesets is hardcoded to `E:\`.
+
+**Name slots are blank by design.** Nothing in this repo will make the AI call you by a hardcoded name. The ruleset (`files/nonprofitclaude.md`) refers to "the operator" throughout. `files/user.md` ships with `_____` placeholders and blank fields. To fill them in, either edit `files/user.md` before copying it to your workspace, or just tell the agent your name in your first chat after install and the agent will write it to `user.md` itself.
 
 **Time budget.** A clean install on a fresh Windows 11 machine takes 4 to 8 hours depending on download speeds and whether you hit the gotchas flagged inline. The big chunks are: Scrapling Camoufox binaries (~15 min), Docker images (~10 min), patch application (~30 min if you go carefully).
 
@@ -262,7 +265,7 @@ Eigent's auto-memory is limited to those in-chat notes. Durable cross-session me
 
 ## Step 8 — ripgrep
 
-Fast code search the agent prefers over plain grep. Required, not optional: the operating rules baked into `prompt.py` (anir_operating_rules §4) enforce `rg --json` structured output. The user-facing ruleset (`claude.md`) does not reference ripgrep by name; enforcement comes from the baked-in system prompt.
+Fast code search the agent prefers over plain grep. Required, not optional: the operating rules baked into `prompt.py` (operator_operating_rules §4) enforce `rg --json` structured output. The user-facing ruleset (`claude.md`) does not reference ripgrep by name; enforcement comes from the baked-in system prompt.
 
 ### 8.1 Install
 1. `Start menu`, type `cmd`, Enter to open Command Prompt.
@@ -516,7 +519,7 @@ This preserves the subdirectory structure (`agent/`, `agent/factory/`, `agent/to
 ### 13b.4 What each file does (overview)
 For the why behind each patch, see [PATCHES.md](PATCHES.md). The short version:
 - **environment_hands.py** (P4) — adds `E:\` as an allowed filesystem root so the agent can read `E:\Logseq\` without moving it under your home dir.
-- **prompt.py** (P1) — bakes the operating ruleset (`anir_operating_rules` §0-§14) into every agent. Includes Coordinator dispatch protocol, anti-fabrication rules, URL verification.
+- **prompt.py** (P1) — bakes the operating ruleset (`operator_operating_rules` §0-§14) into every agent. Includes Coordinator dispatch protocol, anti-fabrication rules, URL verification.
 - **chat_service.py** (P2) — wires the Coordinator role + asyncio.gather bugfix for browser_agent.
 - **toolkit_assembler.py** (P3) — disk-config bridge for MCP loading, sanitizer empty-string coercion, env var handling.
 - **listen_chat_agent.py** (P5) — sanitizer interception fix (wraps async_call too), handles hallucinated tool names gracefully.

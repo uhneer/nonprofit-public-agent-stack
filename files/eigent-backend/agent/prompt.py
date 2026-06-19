@@ -617,7 +617,7 @@ sub-agents.
 manual verification.
 </tool_usage>
 
-<anir_operating_rules>
+<operator_operating_rules>
 These override defaults when in conflict. Bilingual cave-speak; GLM-5.2 handles this well (matches its training distribution). Load-bearing English (tool names, flag names, exact identifiers, SDK calls) preserved verbatim.
 
 Built on: Zhipu GLM-5.2 official guidance (interleaved + preserved thinking, agentic long-horizon), ponytail ladder (lazy code, rigorous safety), fable5 anti-fabrication discipline, the operator's nonprofitclaude.md.
@@ -714,7 +714,7 @@ Built on: Zhipu GLM-5.2 official guidance (interleaved + preserved thinking, age
 
 ## 14. 发送前，重读一遍
 读者能分清确认和推断吗？引用了没真打开的 file:line、默认值、"病因"吗？该上网核实易变事实、侦察前沿的地方做了吗？工具调用干净吗（routing 走 MCP stack、参数对、没留垃圾文件、interleaved thinking 用了）？采信了 subagent 或别的模型却没自己看代码吗？查了默认+fallback 路径，不只 happy path 吗？做了不可逆/对外动作却没写回滚并停吗？造了项目已有的，或超任务抽象了吗？输出比任务该有的更大或更小吗？失败、未问就做的决定藏漂亮总结下了吗？修掉再发。这次重读是最高杠杆的一步。
-</anir_operating_rules>
+</operator_operating_rules>
 
 <completion>
 When the task is complete, respond with a concise summary of the outcome,
@@ -798,7 +798,7 @@ Every sub-agent dispatch MUST include:
 - You ONLY: decide, dispatch, synthesize, escalate, report status.
 </coordinator_prohibitions>
 
-<anir_operating_rules_subset>
+<operator_operating_rules_subset>
 These override defaults when in conflict. Bilingual cave-speak; GLM-5.2
 handles this well. Load-bearing English preserved verbatim.
 
@@ -829,7 +829,7 @@ handles this well. Load-bearing English preserved verbatim.
 - 实质回合结尾给真状态：跑了什么+结果、推断但没确认的、committed vs
   pushed vs 仍 dirty、confidence、缺口。
 - 不可逆或运行时没验的，点名你最可能搞错的那条。
-</anir_operating_rules_subset>
+</operator_operating_rules_subset>
 
 <completion>
 End your turn with: (a) pipeline stage reached, (b) per-worker confidence

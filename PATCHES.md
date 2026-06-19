@@ -37,10 +37,10 @@ Back up the original before patching: `cp <file> <file>.bak`. Keep the `.bak` fi
 
 **File:** `E:\Eigent\resources\backend\app\agent\prompt.py` (mirrored to `E:\Eigent-source\backend\app\agent\prompt.py`)
 
-**Stock behavior:** Single `SINGLE_AGENT_SYS_PROMPT` constant with the factory system prompt. No Coordinator prompt, no anir_operating_rules block, no tool-routing enforcement.
+**Stock behavior:** Single `SINGLE_AGENT_SYS_PROMPT` constant with the factory system prompt. No Coordinator prompt, no operator_operating_rules block, no tool-routing enforcement.
 
 **Patched behavior:** Three changes:
-1. The `<anir_operating_rules>` block (§0-§14) is appended to `SINGLE_AGENT_SYS_PROMPT`. This is the nonprofit ruleset: priorities, voice, long-run behavior, web-verify discipline, tool-call hygiene, verify-before-claim, few-shot examples. §15 (Coordinator dispatch protocol) was extracted to a dedicated constant.
+1. The `<operator_operating_rules>` block (§0-§14) is appended to `SINGLE_AGENT_SYS_PROMPT`. This is the nonprofit ruleset: priorities, voice, long-run behavior, web-verify discipline, tool-call hygiene, verify-before-claim, few-shot examples. §15 (Coordinator dispatch protocol) was extracted to a dedicated constant.
 2. A new `COORDINATOR_SYS_PROMPT` constant is defined separately. It contains `<pipeline_order>`, `<dispatch_contract>`, and `<synthesis_rules>` tags. This prompt is what the Coordinator workforce role actually loads.
 3. Worker descriptions in `construct_workforce` calls are rewritten so Coordinator routes to the right worker (see P2).
 
@@ -48,7 +48,7 @@ Back up the original before patching: `cp <file> <file>.bak`. Keep the `.bak` fi
 
 **Verification:** health test T13.
 - SINGLE_AGENT_SYS_PROMPT around line 566.
-- `<anir_operating_rules>` opens ~line 608.
+- `<operator_operating_rules>` opens ~line 608.
 - Highest section inside is §14 (NOT §15).
 - COORDINATOR_SYS_PROMPT defined ~line 714.
 - `<pipeline_order>` tag present in COORDINATOR_SYS_PROMPT.
@@ -58,13 +58,13 @@ Back up the original before patching: `cp <file> <file>.bak`. Keep the `.bak` fi
 ```python
 SINGLE_AGENT_SYS_PROMPT = (
     "<stock factory prompt>"
-    + "\n\n<anir_operating_rules>"
+    + "\n\n<operator_operating_rules>"
     + "\n## 0. 优先级（平局以此为准）"
     + "\n- the operator 的意图和体验第一..."
     + "\n## 1. 文风（本文件也遵守）"
     # ... sections 2 through 14 ...
     + "\n## 14. 发送前，重读一遍"
-    + "\n</anir_operating_rules>"
+    + "\n</operator_operating_rules>"
 )
 
 COORDINATOR_SYS_PROMPT = (
@@ -83,7 +83,7 @@ COORDINATOR_SYS_PROMPT = (
     + "\n</dispatch_contract>"
     + "\n<synthesis_rules>"
     + "\n- Cite worker outputs verbatim when they contain verifiable facts."
-    + "\n- Apply the anir_operating_rules from SINGLE_AGENT_SYS_PROMPT to your own output."
+    + "\n- Apply the operator_operating_rules from SINGLE_AGENT_SYS_PROMPT to your own output."
     + "\n- If any worker fabricates (T31 pattern), discard its output and flag the failure."
     + "\n</synthesis_rules>"
 )
