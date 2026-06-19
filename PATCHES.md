@@ -459,7 +459,7 @@ When checking URL reachability, apply this rule strictly:
 - HTTP 200, 201, 204 = PASS.
 - HTTP 301, 302, 307, 308 that resolves to a 2xx final response = PASS. These
   are normal permanent/temporary redirects (e.g., openhands.dev 308 →
-  www.all-hands.dev 200). Do NOT mark them FAIL. Fetch with redirects enabled
+  www.openhands.dev 200). Do NOT mark them FAIL. Fetch with redirects enabled
   and report the FINAL code, not the intermediate.
 - HTTP 4xx, 5xx = FAIL.
 - Connection error, DNS failure, timeout = FAIL.

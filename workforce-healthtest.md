@@ -396,7 +396,7 @@ Verifier-only micro-test. Do NOT invoke Researcher, Subject Analyst, or Implemen
 
 Verify these 3 URLs and emit the standard Verifier output schema (VERDICT / EVIDENCE / FIX / ESCALATION) for each:
 
-1. https://openhands.dev  (known 308 redirect to www.all-hands.dev)
+1. https://openhands.dev  (known 308 redirect to www.openhands.dev)
 2. https://docs.openhands.dev  (known 308 redirect)
 3. https://github.com/OpenHands/OpenHands  (straight 200, no redirect)
 
@@ -427,7 +427,7 @@ All 3 rows should be PASS. If row 1 or 2 is FAIL, the URL rule is broken.
 
 **Pass criteria (all 3 must hold):**
 
-1. Row 1 (openhands.dev) returns PASS with a 2xx final HTTP code (typically 200 after 308 → www.all-hands.dev).
+1. Row 1 (openhands.dev) returns PASS with a 2xx final HTTP code (typically 200 after 308 → www.openhands.dev).
 2. Row 2 (docs.openhands.dev) returns PASS with a 2xx final HTTP code.
 3. Row 3 (github.com/OpenHands/OpenHands) returns PASS with HTTP 200.
 
