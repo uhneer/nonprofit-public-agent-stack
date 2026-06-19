@@ -229,12 +229,6 @@ Replace every template placeholder with real, durable facts about you:
 
 ---
 
-## Step 6 — (removed)
-
-The previous `soul.md` persona step is dropped. `claude.md` §1 owns voice; a separate persona file is not load-bearing for this stack. Step number left in place to avoid renumbering cascade.
-
----
-
 ## Step 7 — Memory store (cave-speak)
 
 ### 7.1 Copy the template

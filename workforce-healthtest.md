@@ -250,7 +250,7 @@ The Coordinator's wrap-up must include:
 
 **Fail hints per criterion:**
 
-- (1) fails: Coordinator didn't dispatch, or Implementer couldn't write. Check `chat_service.py:2633-2643` asyncio.gather is intact (PATCHES.md P2). Check that `E:/tmp/` is writable.
+- (1) fails: Coordinator didn't dispatch, or Implementer couldn't write. Check `chat_service.py:2633-2643` asyncio.gather is intact (PATCHES.md P2). Check that the workspace dir `E:/Logseq/` is writable.
 - (2) fails: a role's sys_prompt is being dropped. Check prompt.py imports in chat_service.py and the four factory files (developer.py, browser.py, document.py, multi_modal.py).
 - (3) fails: Researcher or Subject Analyst didn't read source files. Check MCP tools loaded (`healthtest.md` T17, T23). Check that BROWSER_SYS_PROMPT and DOCUMENT_SYS_PROMPT actually contain the new Researcher / Subject Analyst instructions, not the old "search the web" / "document processing" defaults.
 - (4) fails: Researcher fabricated output (claimed tool result without calling the tool). Same anti-fabrication gap as `healthtest.md` T31. Known model-behavior ceiling on GLM-5.2.
