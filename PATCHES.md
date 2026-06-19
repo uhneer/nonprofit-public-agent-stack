@@ -118,6 +118,24 @@ COORDINATOR_SYS_PROMPT = (
 - `add_single_agent_worker` description strings contain "Implementer", "Researcher", "Subject Analyst", "Verifier": yes.
 - Old strings "Developer Agent: master-level coding", "Browser Agent: can search the web", "Document Agent: document processing", "Multi-Modal Agent: media processing": NOT present.
 
+**Regression note (2026-06-19):** The 5-agent wiring introduced an asyncio bug in the same file. The stock `asyncio.gather(...)` block that builds all 7 worker agents called `browser_agent(...)` and `developer_agent(...)` as bare callables, but `browser_agent` is defined as a *sync* function (`def browser_agent(` at `app/agent/factory/browser.py:176`), so its direct return value is a `ChatAgent`, not a coroutine. `asyncio.gather` runs every arg through `ensure_future`, which rejects non-awaitables with `an asyncio.Future, a coroutine or an awaitable is required`. `developer_agent` and `document_agent` happen to be async so they survived; `browser_agent` and `multi_modal_agent` (also sync) must be wrapped in `asyncio.to_thread(partial(...))`.
+
+**Regression fix:** Always wrap the two sync factories. Sketch:
+```python
+from functools import partial
+
+results = await asyncio.gather(
+    asyncio.to_thread(_create_coordinator_and_task_agents),
+    asyncio.to_thread(_create_new_worker_agent),
+    asyncio.to_thread(partial(browser_agent, options, hands=hands)),      # sync, MUST wrap
+    developer_agent(options, hands=hands),                                 # async, no wrap
+    document_agent(options, hands=hands),                                  # async, no wrap
+    asyncio.to_thread(partial(multi_modal_agent, options, hands=hands)),  # sync, MUST wrap
+    mcp_agent(options),
+)
+```
+The 7-element order is preserved so the downstream `results[0]..results[6]` tuple unpackling does not shift. Verified against `.bak3` backup which already had the correct wrap; the regression was introduced when the wrap was lost during a later edit.
+
 **Code (sketch):**
 ```python
 from app.agent.prompt import COORDINATOR_SYS_PROMPT
