@@ -397,6 +397,10 @@ Find an Associated Press article from the last 7 days on any topic. Use SearXNG 
 
 ---
 
+**Workforce mode (5-agent) tests are in [`workforce-healthtest.md`](workforce-healthtest.md).** This file is for the single-agent stack. T13b and T32 stay here as basic preflight checks for the workforce wiring; the deep workforce audit (T44) lives in the separate file.
+
+---
+
 ## User-only tests
 
 These cannot be run by the agent. Do them yourself after the agent-run tests pass.
@@ -426,13 +430,14 @@ Message your bot. Approve an action from the phone.
 ## Final checklist
 
 - [ ] T01 to T43 all pass (T31 acceptable as PASS-with-concern, see test note).
+- [ ] If you run workforce mode, also run `workforce-healthtest.md` (T44 giga audit).
 - [ ] U01 to U04 all pass (or are explicitly skipped if optional).
 
 If anything fails, fix the highest-severity failure first, not the easiest one. Severity order:
 1. Provider and model broken (T01 to T05), nothing else works, fix this first.
 2. Ruleset not loaded (T36 to T42), the agent will drift without you noticing.
 3. MCP broken (T06 to T12), partial capability, research is degraded.
-4. Eigent capabilities broken (T29 to T32), you've lost multi-agent + skills.
+4. Eigent capabilities broken (T29 to T32), you've lost multi-agent + skills. Deep workforce audit is in `workforce-healthtest.md`.
 5. Services and persistence (T19 to T24, T33 to T35), works now, breaks on reboot.
 6. Files and prompt (T13 to T18), usually a one-copy fix.
 7. Remote access (T25 to T28), only matters if you rely on phone access.
