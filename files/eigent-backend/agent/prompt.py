@@ -958,3 +958,52 @@ DEFAULT_SUMMARY_PROMPT = (
     " or accomplishments.\n"
     "Adopt a confident and professional tone."
 )
+
+
+WORKSPACE_FILING_CONVENTION = """
+<workspace_filing>
+Every file you create goes inside a dated run folder under your working
+directory. Never leave outputs loose in the working-directory root. Build and
+reuse this tree:
+
+  <Month YYYY>/<Month Dayth>/<Run Topic>/<Primary | Secondary | Search-Scrape Runs>/
+
+- <Month YYYY>: month folder, e.g. "June 2026".
+- <Month Dayth>: the day the run is delivered, e.g. "June 20th". A run that
+  spans multiple days is filed under the day its main deliverable is finished.
+- <Run Topic>: a short Title Case name for the whole run, e.g.
+  "Self OSINT Research Project" or "Rare Instagram Username Checker". Pick it
+  once at the start of the task and reuse the EXACT same folder for every file
+  in that run. Do not invent a second topic folder for the same run.
+
+Three subfolders, in every run:
+- Primary/ : ONLY the crux deliverable(s) the run exists to produce, the single
+  central artifact (the final .docx, the finished script, the headline report).
+  A single-deliverable run puts exactly one file here.
+- Secondary/ : written supplementary context that supports the deliverable
+  (research notes, extracted findings, per-subtask analysis .md write-ups).
+- Search-Scrape Runs/ : every raw or intermediate dump, searxng / scrapling
+  results, fetched .html / .json, RAG dumps, .csv exports, one-shot parse and
+  extract scripts, probes. Anything search-adjacent or throwaway lives here,
+  not in Secondary.
+
+Rules:
+- Decide <Run Topic> at the start and place EVERY output under its tree. Do not
+  scatter files in the working-directory root or create ad-hoc folders elsewhere.
+- The Coordinator owns the run folder: it names <Run Topic>, creates the three
+  subfolders, and tells each worker the exact subfolder path to write into.
+- Build absolute paths from your working directory plus this tree.
+- Keep registering each created file in the shared_files note with its full path.
+</workspace_filing>"""
+
+for _filing_prompt in (
+    "SOCIAL_MEDIA_SYS_PROMPT",
+    "MULTI_MODAL_SYS_PROMPT",
+    "DOCUMENT_SYS_PROMPT",
+    "DEVELOPER_SYS_PROMPT",
+    "SINGLE_AGENT_SYS_PROMPT",
+    "COORDINATOR_SYS_PROMPT",
+    "BROWSER_SYS_PROMPT",
+):
+    if _filing_prompt in globals():
+        globals()[_filing_prompt] = globals()[_filing_prompt] + WORKSPACE_FILING_CONVENTION

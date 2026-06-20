@@ -500,6 +500,50 @@ Recommend (D) first to pin the root cause, then decide between (A)/(B)/(C) based
 
 ---
 
+## P13 — prompt.py workspace filing convention (run-folder structure)
+
+**File:** `E:\Eigent\resources\backend\app\agent\prompt.py` (mirrored to `E:\Eigent-source\backend\app\agent\prompt.py`)
+
+**Stock behavior:** All seven file-writing agent prompts (SOCIAL_MEDIA, MULTI_MODAL, DOCUMENT, DEVELOPER, SINGLE_AGENT, COORDINATOR, BROWSER) tell the agent "all local file operations occur in `{working_directory}`" but never specify a layout. Every run dumps its outputs flat into the working-directory root, so the workspace becomes an undifferentiated pile of `.md`, `.html`, `.json`, `.csv`, and one-shot scripts from many unrelated runs.
+
+**Patched behavior:** A module-level `WORKSPACE_FILING_CONVENTION` constant (a `<workspace_filing>` block) is defined near the end of `prompt.py` and appended to each of the seven file-writing prompts via a loop. It instructs every agent to file outputs under:
+
+    <Month YYYY>/<Month Dayth>/<Run Topic>/<Primary | Secondary | Search-Scrape Runs>/
+
+- **Primary/** — only the crux deliverable(s) the run exists to produce (the final .docx, the finished script, the headline report).
+- **Secondary/** — written supplementary context (.md notes, extracted findings, per-subtask analysis).
+- **Search-Scrape Runs/** — raw/intermediate dumps (searxng/scrapling results, fetched .html/.json, RAG dumps, .csv exports, one-shot parse/extract scripts, probes).
+
+The Coordinator owns the run folder: it names `<Run Topic>`, creates the three subfolders, and tells each worker the exact subfolder to write into. The block is brace-free (survives the existing `.format()` calls) and name-neutral (identical text across the live mirrors and the public/private repo copies).
+
+**Why:** Stops the working-directory-root flood. Each run becomes self-contained: deliverable in Primary, supporting writeups in Secondary, throwaway/search dumps quarantined in Search-Scrape Runs. Mirrors how the operator already files runs by hand (Month > Day > Run Topic).
+
+**Verification:**
+- After import, each of the 7 file-writing prompts contains exactly one `<workspace_filing>`.
+- `python -m py_compile prompt.py` passes on all 4 copies.
+- `DEVELOPER_SYS_PROMPT.format(...)` output contains `Primary/` and `Search-Scrape Runs/` (filing text survives formatting).
+- The utility prompts (TASK_SUMMARY / QUESTION_CONFIRM / MCP / DEFAULT_SUMMARY) do NOT contain `<workspace_filing>`.
+
+**Code (outline, see prompt.py for full text):**
+```python
+WORKSPACE_FILING_CONVENTION = """
+<workspace_filing>
+  <Month YYYY>/<Month Dayth>/<Run Topic>/<Primary | Secondary | Search-Scrape Runs>/
+  ... (Primary = crux deliverable, Secondary = supporting .md, Search-Scrape Runs = raw dumps) ...
+</workspace_filing>"""
+
+for _filing_prompt in (
+    "SOCIAL_MEDIA_SYS_PROMPT", "MULTI_MODAL_SYS_PROMPT", "DOCUMENT_SYS_PROMPT",
+    "DEVELOPER_SYS_PROMPT", "SINGLE_AGENT_SYS_PROMPT", "COORDINATOR_SYS_PROMPT",
+    "BROWSER_SYS_PROMPT",
+):
+    globals()[_filing_prompt] = globals()[_filing_prompt] + WORKSPACE_FILING_CONVENTION
+```
+
+**To restore:** delete the `WORKSPACE_FILING_CONVENTION` block and the append loop at the end of `prompt.py`, or restore `prompt.py.bak.prefiling` on the live mirrors.
+
+---
+
 ## Apply order
 
 For a fresh install (stock Eigent), apply patches in this order:
@@ -514,6 +558,7 @@ For a fresh install (stock Eigent), apply patches in this order:
 9. P8 (headless CDP Chrome .bat) — runtime workaround, not a code patch.
 10. P10 — TBD.
 11. P12 — KNOWN ISSUE (backend hang), no fix yet. Diagnostic work recommended before any code change.
+12. P13 — prompt.py workspace filing convention (run-folder structure), apply with P1.
 
 After applying, run the health test from a fresh Eigent chat. Every AI/LOCATE test except T31 (PASS-with-concern) should pass. U01 (actual reboot) is the last gate. If the backend hangs after workforce use, see P12.
 
