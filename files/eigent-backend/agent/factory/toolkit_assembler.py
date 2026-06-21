@@ -383,6 +383,108 @@ def _schema_for_param(tool: FunctionTool, param: str) -> str | None:
     return t
 
 
+# ---- BEGIN P14 tool-output cleaning (stop scrapling/searxng token bombs) ----
+from html.parser import HTMLParser as _P14HTMLParser
+
+_TOOL_OUTPUT_MAX_CHARS = 16000
+_HTML_DROP_TAGS = {"script", "style", "noscript", "svg", "head", "nav",
+                   "footer", "header", "aside", "form", "template", "iframe",
+                   "button", "input", "select", "option", "link", "meta"}
+
+
+class _P14HtmlToText(_P14HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self._out = []
+        self._skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in _HTML_DROP_TAGS:
+            self._skip += 1
+        elif tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            self._out.append("\n\n" + "#" * int(tag[1]) + " ")
+        elif tag in ("p", "br", "li", "tr", "div", "section", "article",
+                     "blockquote", "ul", "ol"):
+            self._out.append("\n")
+
+    def handle_startendtag(self, tag, attrs):
+        if tag == "br":
+            self._out.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in _HTML_DROP_TAGS and self._skip > 0:
+            self._skip -= 1
+
+    def handle_data(self, data):
+        if self._skip == 0:
+            t = data.strip()
+            if t:
+                self._out.append(t + " ")
+
+    def text(self):
+        return "".join(self._out)
+
+
+def _looks_like_html(s):
+    low = s[:4000].lower()
+    return ("<!doctype html" in low or "<html" in low or "<body" in low
+            or (s.count("<") > 30
+                and ("</div" in low or "</p>" in low or "</span" in low)))
+
+
+def _collapse_ws(s):
+    import re
+    s = re.sub(r"[ \t\x0b\x0c]+", " ", s)
+    s = re.sub(r" *\n *", "\n", s)
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()
+
+
+def _clean_tool_output(result, tool_name="tool"):
+    r"""Strip HTML to headings+text and cap length before a tool result enters
+    agent memory. Fixes the scrapling/searxng token bomb where a full fetched
+    page (e.g. ~724KB ~ 180K tokens) used to land whole in context and be
+    re-sent every step. Non-string and small non-HTML results pass through
+    unchanged; oversized results keep a head slice and offload the full cleaned
+    text to a cache file the agent can read on demand."""
+    if not isinstance(result, str):
+        return result
+    if len(result) <= _TOOL_OUTPUT_MAX_CHARS and not _looks_like_html(result):
+        return result
+    text = result
+    stripped = False
+    if _looks_like_html(text):
+        try:
+            p = _P14HtmlToText()
+            p.feed(text)
+            p.close()
+            text = _collapse_ws(p.text())
+            stripped = True
+        except Exception:
+            text = result
+    if len(text) <= _TOOL_OUTPUT_MAX_CHARS:
+        return text if stripped else result
+    try:
+        import os
+        import tempfile
+        import hashlib
+        cache = os.path.join(tempfile.gettempdir(), "eigent_tool_cache")
+        os.makedirs(cache, exist_ok=True)
+        h = hashlib.sha1(text[:1024].encode("utf-8", "ignore")).hexdigest()[:10]
+        path = os.path.join(cache, "%s_%s.txt" % (tool_name, h))
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        note = ("\n\n[STRATA tool-output cleaner: "
+                + ("HTML stripped to text+headings, " if stripped else "")
+                + "%d->%d chars, kept first %d. Full cleaned text at %s "
+                  "-- read a slice if you need more.]"
+                % (len(result), len(text), _TOOL_OUTPUT_MAX_CHARS, path))
+        return text[:_TOOL_OUTPUT_MAX_CHARS] + note
+    except Exception:
+        return text[:_TOOL_OUTPUT_MAX_CHARS] + "\n\n[output truncated]"
+# ---- END P14 tool-output cleaning ----
+
+
 def _schema_aware_sanitize(
     func: Callable,
     tool: FunctionTool,
@@ -448,7 +550,8 @@ def _schema_aware_sanitize(
 
     async def async_wrapper(**kwargs: Any) -> Any:
         cleaned, _ = _clean_kwargs(kwargs)
-        return await func.async_call(**cleaned)
+        _p14_r = await func.async_call(**cleaned)
+        return _clean_tool_output(_p14_r, tool_name)
 
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -458,7 +561,8 @@ def _schema_aware_sanitize(
         ][: len(args)]
         merged = {**dict(zip(sig_params, args)), **kwargs}
         cleaned, _ = _clean_kwargs(merged)
-        return func(**cleaned)
+        _p14_r = func(**cleaned)
+        return _clean_tool_output(_p14_r, tool_name)
 
     async_wrapper.__name__ = f"{func_name}_sanitized_async"
     return wrapper, async_wrapper

@@ -993,6 +993,13 @@ Rules:
 - The Coordinator owns the run folder: it names <Run Topic>, creates the three
   subfolders, and tells each worker the exact subfolder path to write into.
 - Build absolute paths from your working directory plus this tree.
+- Create each output by WRITING IT to its full absolute path with your
+  file-write tool, which creates the parent folders for you. Do NOT hand-build
+  these folders with shell mkdir. The folder names contain spaces, so if you
+  ever must use a shell, quote the ENTIRE path, and never use `mkdir -p` in
+  PowerShell (it makes a literal folder named -p and splits the spaces).
+  PowerShell: New-Item -ItemType Directory -Force -Path "<full path>".
+  bash: mkdir -p "<full path>" (quotes required).
 - Keep registering each created file in the shared_files note with its full path.
 </workspace_filing>"""
 

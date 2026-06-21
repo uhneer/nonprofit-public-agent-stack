@@ -544,6 +544,26 @@ for _filing_prompt in (
 
 ---
 
+## P14 - toolkit_assembler.py tool-output cleaning (scrapling/searxng token-bomb fix)
+
+**File:** `E:\Eigent\resources\backend\app\agent\factory\toolkit_assembler.py` (mirrored to `E:\Eigent-source\backend\app\agent\factory\toolkit_assembler.py`)
+
+**Pre-patch behavior:** MCP tool calls were sanitized on the way IN (args, P3), but the tool's RETURN value went into agent memory untouched. A scrapling `stealthy_fetch` of a full page (e.g. ~724KB ~ 180K tokens) landed whole in context and was re-sent every step - a primary driver of the 300M-token burn. No HTML stripping, no length cap.
+
+**Patched behavior:** A stdlib-only cleaner (`_clean_tool_output`, an `html.parser`-based `_P14HtmlToText` + `_looks_like_html` + `_collapse_ws`) is inserted before `_schema_aware_sanitize`, and both MCP wrapper return paths (`async_wrapper` and `wrapper`) now pass the result through it. For any string result that looks like HTML it strips `script/style/noscript/svg/head/nav/footer/header/aside/form/iframe/...` and keeps text + headings (h1-h6 rendered as markdown `#`..`######`). Any result over `_TOOL_OUTPUT_MAX_CHARS` (16000) keeps a head slice and offloads the full cleaned text to `%TEMP%\eigent_tool_cache\<tool>_<hash>.txt` with a note telling the agent where to read more. Non-string and small non-HTML results (searxng JSON, github, etc.) pass through unchanged.
+
+**Why:** Kills the scrapling/searxng token bomb at the MCP boundary, the thing the audit found but the prior pass never actually fixed. The agent now pays ~4K tokens + a pointer instead of ~180K for a full page, and only sees headers + real text, not script/CSS/nav.
+
+**Verification:** standalone exec of the inserted block on a synthetic 199KB HTML page: 199094 -> 16239 chars; script/style/nav/footer removed; h1/h2 kept as `#`/`##`; body text kept; output capped to 16K + note; overflow file written; a small JSON string and a dict pass through untouched. `python -m py_compile` passes on all 4 copies.
+
+**To restore:** delete the `# ---- BEGIN P14 ... END P14 ----` block and revert the two `_p14_r = ...; return _clean_tool_output(...)` lines back to `return await func.async_call(**cleaned)` / `return func(**cleaned)`. Or restore `toolkit_assembler.py.bak.p14` on the live mirror.
+
+**Related P13 addendum (prompt.py):** the WORKSPACE_FILING_CONVENTION block gained a folder-creation-safety rule: create each output by writing to its full absolute path with the file tool (which makes parent folders); if a shell is unavoidable, quote the ENTIRE path and never use `mkdir -p` in PowerShell (it makes a literal `-p` folder and splits spaces). This fixes agents spraying junk fragment folders (`-p`, `June`, `2026`, `20th`, `Search-Scrape`...) into the workspace root from cross-shell mkdir.
+
+**Note:** `E:\Eigent-source\` had drifted to an older toolkit_assembler.py (missing `import inspect` + `_schema_parameters`); P14 resynced it to the patched live copy. Restore from `toolkit_assembler.py.bak.presync` if needed.
+
+---
+
 ## Apply order
 
 For a fresh install (stock Eigent), apply patches in this order:
@@ -559,6 +579,7 @@ For a fresh install (stock Eigent), apply patches in this order:
 10. P10 — TBD.
 11. P12 — KNOWN ISSUE (backend hang), no fix yet. Diagnostic work recommended before any code change.
 12. P13 — prompt.py workspace filing convention (run-folder structure), apply with P1.
+13. P14 - toolkit_assembler.py tool-output cleaning (apply with P3; independent).
 
 After applying, run the health test from a fresh Eigent chat. Every AI/LOCATE test except T31 (PASS-with-concern) should pass. U01 (actual reboot) is the last gate. If the backend hangs after workforce use, see P12.
 
