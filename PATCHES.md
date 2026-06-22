@@ -564,6 +564,22 @@ for _filing_prompt in (
 
 ---
 
+## P15 - prompt.py sedimentation method (workforce big-task decomposition)
+
+**File:** `E:\Eigent\resources\backend\app\agent\prompt.py` (mirrored to `E:\Eigent-source\backend\app\agent\prompt.py`)
+
+**Pre-patch behavior:** the prompts said nothing about HOW to run a big multi-agent task. A DeepSeek/GLM workforce run on a large audit/design/research doc would try to one-shot it, silently truncate around 20 pages (the model's "looks done" stopping point), and lose everything not yet written when the backend hung (P12). Output was also incohesive because workers were not given tight, bounded areas.
+
+**Patched behavior:** a cave-speak `SEDIMENTATION_METHOD` block (a `<沉积法>` / sedimentation block, brace-free so it survives the existing `.format()` calls) is defined at the end of `prompt.py` and appended via a loop to the 6 workforce/worker prompts (MULTI_MODAL, DOCUMENT, DEVELOPER, SINGLE_AGENT, COORDINATOR, BROWSER; NOT SOCIAL_MEDIA, which does not do multi-area work). It mandates: decompose into many small bounded areas (one worker per area, given only its scope + the interface it must match, so the pieces snap together); write `COVERAGE.md` (a per-area checklist) + `DECISIONS.md` (one row per decision) up front; write each finding/section to disk the moment it is done (落盘才算数, never buffer the whole doc); fan out in waves of 2-3 areas, writing between waves (avoids the P12 hang and loses almost nothing on a freeze); attach evidence + confirmed/inferred + a finding schema (id|where|what|cause|impact|fix|effort) to every area; assemble (not rewrite) the final doc from the on-disk sections; treat a fully-ticked COVERAGE.md + a non-empty assembled doc as the completion gate; never feed the assembled answer-doc back to downstream agents (they would take a prior agent's conclusions as objective fact, i.e. self-poisoning); coordinate via on-disk files + the shared_files note, not by stuffing context.
+
+**Why:** beats the model's silent ~20-page truncation, makes a big run survive a backend hang because everything is already on disk, and produces cohesive output because each worker owns one bounded piece. This is the methodology that produced the strong nuco audit. Mirrors `nonprofit-agent-rules` §3 (the portable ruleset).
+
+**Verification:** after import, each of the 6 workforce prompts contains exactly one `<沉积法`; SOCIAL_MEDIA contains zero. `python -m py_compile` passes on all 4 copies. `.format()` still works (the block is brace-free) and the formatted COORDINATOR prompt contains `COVERAGE.md`.
+
+**To restore:** delete the `SEDIMENTATION_METHOD` block and the append loop at the end of `prompt.py`, or restore `prompt.py.bak.p15` on the live mirrors.
+
+---
+
 ## Apply order
 
 For a fresh install (stock Eigent), apply patches in this order:
@@ -580,6 +596,7 @@ For a fresh install (stock Eigent), apply patches in this order:
 11. P12 — KNOWN ISSUE (backend hang), no fix yet. Diagnostic work recommended before any code change.
 12. P13 — prompt.py workspace filing convention (run-folder structure), apply with P1.
 13. P14 - toolkit_assembler.py tool-output cleaning (apply with P3; independent).
+14. P15 - prompt.py sedimentation method (workforce big-task decomposition), apply with P1.
 
 After applying, run the health test from a fresh Eigent chat. Every AI/LOCATE test except T31 (PASS-with-concern) should pass. U01 (actual reboot) is the last gate. If the backend hangs after workforce use, see P12.
 

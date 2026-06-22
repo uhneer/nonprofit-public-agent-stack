@@ -1014,3 +1014,30 @@ for _filing_prompt in (
 ):
     if _filing_prompt in globals():
         globals()[_filing_prompt] = globals()[_filing_prompt] + WORKSPACE_FILING_CONVENTION
+
+
+SEDIMENTATION_METHOD = """
+
+<沉积法 sedimentation - workforce / multi-agent 跑大任务用>
+大任务（审计、架构设计、深研究、大重构、大文档）多 agent 跑：绝不 one-shot，绝不把整篇憋在 context 里。憋 = 必截断（GLM/DeepSeek 写到约 20 页就假性收尾停笔），且 backend hang 或 worker 死时全部丢。改用沉积：把一坨拆成尽量多、尽量小的独立块，写一块、落一块、最后拼。
+- 拆细。area 越多越小越好。每块独立、边界清、互不重叠，一个 worker 只专精一块。给 worker 只它那块的 scope + 它必须对接的 interface/契约，别给整个问题——边界清各块才能严丝合缝拼起来。
+- 先建账。开跑前写 COVERAGE.md（每个 area 一个 checkbox）+ DECISIONS.md（一行一决定：问题|选啥|否啥|为啥|confidence）。
+- 写一块落一块。worker 一做完，finding 立刻 append 到 FINDINGS_<area>，section 立刻落盘到 section_<NN>_<area>。落盘才算数，绝不攒脑子、绝不只在聊天里报。
+- 分批 fan out。一次只并发 2-3 块，每批之间落盘；别一口气把所有 area 并发出去（最易触发 backend hang）。某块死也几乎不丢，重跑能续。
+- 每块自带证据。file:line / 命令输出 / URL+日期；标 confirmed（亲眼）vs inferred（推）；finding schema：id|where|what|cause|impact|fix|effort。
+- 拼接不重写。最后一个 synthesis worker 从落盘的各 section 拼出终稿 + 顶部总表/摘要：只拼，不重造。
+- 完成 gate。COVERAGE.md 全打勾 + 终稿落盘非空 + 每块都有证据，才算完。剩一个空格就没完，回去补。这条专破"写到一半自我感觉良好就收尾"。
+- 别自我投毒。拼好的终稿/"答案文档"绝不再喂给下游 agent——它会把上一个 agent 的结论当客观事实，错上加错。下游只读原始 section 文件 + 真源（代码/schema/网页/migrations）。
+- 协作靠盘不靠塞。块与块之间用落盘文件 + shared_files note 对接，别靠把一坨塞进彼此 context。
+</沉积法>"""
+
+for _sediment_prompt in (
+    "MULTI_MODAL_SYS_PROMPT",
+    "DOCUMENT_SYS_PROMPT",
+    "DEVELOPER_SYS_PROMPT",
+    "SINGLE_AGENT_SYS_PROMPT",
+    "COORDINATOR_SYS_PROMPT",
+    "BROWSER_SYS_PROMPT",
+):
+    if _sediment_prompt in globals():
+        globals()[_sediment_prompt] = globals()[_sediment_prompt] + SEDIMENTATION_METHOD
